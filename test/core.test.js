@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  toISODate, addDays, weekday, dayType, todayPlan, calcStreak, weekDone, countDone, latestWeight,
+  toISODate, addDays, weekday, dayType, todayPlan, calcStreak, weekDone, weekView, countDone, latestWeight,
   clampTarget, progress, completeDay, startTarget, initialProfile, normalizeProfile, mergeHistory,
 } from '../core.js';
 import { EXERCISES, TIMEZONE } from '../plan.js';
@@ -188,4 +188,16 @@ test('mergeHistory 只追加，已有日期不被覆盖', () => {
   });
   assert.deepEqual(Object.keys(merged).sort(), ['2026-09-30', '2026-10-01']);
   assert.equal(merged['2026-10-01'].done, true);
+});
+
+test('weekView 给出本周每天的状态', () => {
+  const h = historyOf('2026-09-28', '2026-09-30');
+  const w = weekView(h, '2026-10-01'); // 周四
+  assert.deepEqual(w.map((d) => d.label).join(''), '一二三四五六日');
+  assert.deepEqual(w.map((d) => d.status), ['done', 'missed', 'done', 'today', 'future', 'future', 'rest']);
+  assert.deepEqual(w.map((d) => d.isToday), [false, false, false, true, false, false, false]);
+  h['2026-10-01'] = done();
+  assert.equal(weekView(h, '2026-10-01')[3].status, 'done');
+  // 跨月的一周
+  assert.deepEqual(weekView({}, '2026-02-01').map((d) => d.date.slice(5)), ['01-26', '01-27', '01-28', '01-29', '01-30', '01-31', '02-01']);
 });

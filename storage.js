@@ -2,7 +2,7 @@
 import { mergeHistory, normalizeProfile } from './core.js';
 import { EXERCISES } from './plan.js';
 
-const KEYS = { profile: 'lowbar.profile', history: 'lowbar.history' };
+const KEYS = { profile: 'lowbar.profile', history: 'lowbar.history', draft: 'lowbar.draft', undo: 'lowbar.undo' };
 
 function read(key, fallback) {
   try {
@@ -39,6 +39,31 @@ export async function appendHistory(iso, entry) {
   history[iso] = entry;
   write(KEYS.history, history);
   return true;
+}
+
+// 撤销当天的完成：删掉这一天的记录，并恢复完成前的 profile（如果有快照）。
+// 这是"只追加"规则唯一的例外，且只用于当天。
+export async function saveUndo(iso, profile) {
+  write(KEYS.undo, { date: iso, profile });
+}
+
+export async function undoDay(iso) {
+  const history = read(KEYS.history, {});
+  delete history[iso];
+  write(KEYS.history, history);
+  const undo = read(KEYS.undo, null);
+  if (undo?.date === iso && undo.profile) write(KEYS.profile, undo.profile);
+  localStorage.removeItem(KEYS.undo);
+}
+
+// 训练中途的进度（每个动作做了几组），刷新或切出去不丢
+export async function loadDraft(iso) {
+  const d = read(KEYS.draft, null);
+  return d?.date === iso ? d.sets : {};
+}
+
+export async function saveDraft(iso, sets) {
+  write(KEYS.draft, { date: iso, sets });
 }
 
 export async function exportData() {

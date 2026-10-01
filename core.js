@@ -79,6 +79,20 @@ export function weekDone(history, today) {
   return n;
 }
 
+// 本周一到周日每天的状态：done / missed / today / future / rest
+export function weekView(history, today) {
+  const monday = addDays(today, -((weekday(today) + 6) % 7));
+  return [...'一二三四五六日'].map((label, i) => {
+    const date = addDays(monday, i);
+    let status;
+    if (history[date]?.done) status = 'done';
+    else if (dayType(date) === 'rest') status = 'rest';
+    else if (date === today) status = 'today';
+    else status = date < today ? 'missed' : 'future';
+    return { date, label, status, isToday: date === today };
+  });
+}
+
 export function latestWeight(weights = {}) {
   const dates = Object.keys(weights).sort();
   return dates.length ? weights[dates[dates.length - 1]] : null;

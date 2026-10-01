@@ -2,14 +2,14 @@
 import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
   toISODate, todayPlan, calcStreak, weekDone, countDone, latestWeight,
-  completeDay, initialProfile, clampTarget,
+  completeDay, initialProfile, clampTarget, weekView,
 } from './core.js';
 import * as storage from './storage.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-const state = { view: 'home', today: '', profile: null, history: {}, checks: {} };
+const state = { view: 'home', today: '', profile: null, history: {}, sets: {} };
 
 // ---------- 视图切换 ----------
 
@@ -26,8 +26,10 @@ function show(view) {
 
 // ---------- 首页 ----------
 
-function dose(item) {
-  return `${SETS} 组 × ${item.target} ${item.unit}`;
+const totalSets = () => Object.values(state.sets).reduce((a, n) => a + n, 0);
+
+function dots(n) {
+  return Array.from({ length: SETS }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
 }
 
 function renderHome() {
@@ -38,28 +40,40 @@ function renderHome() {
   if (plan.type === 'rest') {
     $('title').textContent = '休息日';
     $('focus').textContent = '今天不练。做几个拉伸，明天继续。休息不会打断连续。';
-    $('list').innerHTML = STRETCHES.map((s) => `<li class="item stretch">${esc(s)}</li>`).join('');
+    $('list').innerHTML = STRETCHES.map((s, i) => {
+      const [name, how] = s.split('：');
+      return `<li class="card stretch"><span class="idx">${i + 1}</span><span class="main"><span class="name">${esc(name)}</span><span class="cue">${esc(how)}</span></span></li>`;
+    }).join('');
     $('action').innerHTML = '';
   } else {
-    $('title').textContent = '今天练';
-    $('focus').textContent = '每组做到目标次数就勾上。约 15 分钟。';
+    $('title').textContent = entry ? '今天练完了' : '今天练';
+    $('focus').textContent = entry ? '' : '每做完一组，点一下对应的卡片。';
     $('list').innerHTML = plan.items.map((item, i) => {
-      const checked = entry ? entry.exercises?.[item.id] : state.checks[item.id];
-      return `<li>
-        <label class="item">
-          <input type="checkbox" data-id="${item.id}"${checked ? ' checked' : ''}${entry ? ' disabled' : ''}>
-          <span class="body">
-            <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
-            <span class="dose">${esc(dose(item))}</span>
-            <span class="cue">${esc(item.cue)}</span>
-          </span>
-          <kbd>${i + 1}</kbd>
-        </label>
-      </li>`;
+      const n = entry ? (entry.exercises?.[item.id] ? SETS : 0) : state.sets[item.id] || 0;
+      const cls = ['card', n >= SETS && 'full', entry && 'locked'].filter(Boolean).join(' ');
+      return `<li><button type="button" class="${cls}" data-id="${item.id}"${entry ? ' disabled' : ''}
+          aria-label="${esc(item.name)}，已做 ${n} / ${SETS} 组">
+        <span class="idx">${i + 1}</span>
+        <span class="main">
+          <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
+          <span class="cue">${esc(item.cue)}</span>
+          <span class="sets">${dots(n)}<span>${n >= SETS ? '完成' : `${n} / ${SETS} 组`}</span></span>
+        </span>
+        <span class="target"><b>${item.target}</b><small>${item.unit} × ${SETS} 组</small></span>
+      </button></li>`;
     }).join('');
-    $('action').innerHTML = entry
-      ? '<p class="done">今天已完成 ✓</p>'
-      : '<button id="complete-btn" class="btn big" type="button">完成今天</button>';
+    if (entry) {
+      const n = Object.values(entry.exercises || {}).filter(Boolean).length;
+      $('action').innerHTML = `<div class="done">
+        <span class="mark" aria-hidden="true">✓</span>
+        <span><b>今天完成了</b><small>完成 ${n} 个动作</small></span>
+        <button id="undo-btn" class="text-btn" type="button">撤销</button>
+      </div>`;
+    } else {
+      const ready = totalSets() > 0;
+      $('action').innerHTML = `<button id="complete-btn" class="btn big" type="button"${ready ? '' : ' disabled'}>完成今天</button>
+        <p class="muted center">${ready ? '没做完的动作不会影响打卡，只是目标不加。' : '至少做完一组才能打卡。'}</p>`;
+    }
   }
   renderStats();
 }
@@ -68,6 +82,8 @@ function renderStats() {
   const { history, today, profile } = state;
   const w = latestWeight(profile.weights);
   $('streak').textContent = calcStreak(history, today);
+  $('week').innerHTML = weekView(history, today).map((d) =>
+    `<li class="day-${d.status}${d.isToday ? ' now' : ''}" title="${d.date}"><i></i><span>${d.label}</span></li>`).join('');
   $('stat-week').textContent = `${weekDone(history, today)} / 6`;
   $('stat-total').textContent = `${countDone(history)} 次`;
   $('stat-weight').textContent = w ? `${w} kg` : '—';
@@ -75,29 +91,41 @@ function renderStats() {
 
 function changeText(c) {
   const ex = EXERCISES[c.id];
-  return `${ex.name}：目标 ${c.from} → ${c.to} ${ex.unit}`;
+  return `${ex.name}目标 ${c.from} → ${c.to} ${ex.unit}`;
 }
 
 async function complete() {
-  const r = completeDay(state.profile, state.history, state.today, state.checks);
+  if (totalSets() === 0) return;
+  const checks = Object.fromEntries(Object.entries(state.sets).map(([id, n]) => [id, n >= SETS]));
+  const r = completeDay(state.profile, state.history, state.today, checks);
   if (!r) return;
   const before = calcStreak(state.history, state.today);
+  await storage.saveUndo(state.today, state.profile);
   if (!(await storage.appendHistory(state.today, r.entry))) return;
   await storage.saveProfile(r.profile);
   state.profile = r.profile;
   state.history = { ...state.history, [state.today]: r.entry };
-  state.checks = {};
   renderHome();
   const after = calcStreak(state.history, state.today);
   const lines = [`连续 ${after} 天${after > before ? '，+1' : ''}。明天见。`, ...r.changes.map(changeText)];
   $('feedback').innerHTML = lines.map(esc).join('<br>');
 }
 
-function toggle(id, value) {
+async function undo() {
+  await storage.undoDay(state.today);
+  await load();
+  $('feedback').textContent = '';
+  renderHome();
+}
+
+// 点一下记一组，满 3 组后再点归零
+async function bump(id) {
   if (state.history[state.today]) return;
-  state.checks[id] = value;
-  const box = $('list').querySelector(`input[data-id="${id}"]`);
-  if (box) box.checked = value;
+  const n = state.sets[id] || 0;
+  state.sets = { ...state.sets, [id]: n >= SETS ? 0 : n + 1 };
+  await storage.saveDraft(state.today, state.sets);
+  renderHome();
+  $('list').querySelector(`[data-id="${id}"]`)?.focus({ preventScroll: true });
 }
 
 // ---------- 首次引导 ----------
@@ -198,17 +226,18 @@ async function load() {
   state.today = toISODate();
   state.profile = await storage.loadProfile();
   state.history = await storage.loadHistory();
+  state.sets = await storage.loadDraft(state.today);
 }
 
 function onKey(e) {
-  if (state.view !== 'home' || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.target.matches?.('input:not([type="checkbox"]), select, textarea')) return;
+  if (state.view !== 'home' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (e.target.matches?.('input, select, textarea')) return;
   if (e.key === ' ') {
     e.preventDefault();
     complete();
   } else if (/^[1-9]$/.test(e.key)) {
-    const box = $('list').querySelectorAll('input[type="checkbox"]')[Number(e.key) - 1];
-    if (box && !box.disabled) toggle(box.dataset.id, !box.checked);
+    const card = $('list').querySelectorAll('button.card')[Number(e.key) - 1];
+    if (card && !card.disabled) bump(card.dataset.id);
   }
 }
 
@@ -216,20 +245,22 @@ function onKey(e) {
 function onVisible() {
   if (document.visibilityState !== 'visible' || !state.profile) return;
   if (toISODate() !== state.today) {
-    state.today = toISODate();
-    state.checks = {};
-    $('feedback').textContent = '';
-    if (state.view === 'home') show('home');
+    load().then(() => {
+      $('feedback').textContent = '';
+      if (state.view === 'home') show('home');
+    });
   }
 }
 
 async function init() {
   await load();
-  $('list').addEventListener('change', (e) => {
-    if (e.target.dataset.id) toggle(e.target.dataset.id, e.target.checked);
+  $('list').addEventListener('click', (e) => {
+    const card = e.target.closest('button.card');
+    if (card) bump(card.dataset.id);
   });
   $('action').addEventListener('click', (e) => {
     if (e.target.id === 'complete-btn') complete();
+    if (e.target.id === 'undo-btn') undo();
   });
   $('settings-btn').addEventListener('click', () => show('settings'));
   $('back-btn').addEventListener('click', () => show('home'));

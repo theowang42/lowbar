@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>lowbar</title>
   <meta name="description" content="每天打开就知道今天练什么">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e0e0f" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -18,7 +18,7 @@
 <body>
   <header class="top">
     <div>
-      <div id="date" class="date"></div>
+      <p id="date" class="date"></p>
       <h1 id="title" class="title"></h1>
     </div>
     <button id="settings-btn" class="icon-btn" type="button" aria-label="设置" hidden>
@@ -31,17 +31,21 @@
     <section class="today">
       <p id="focus" class="focus"></p>
       <ol id="list" class="list"></ol>
-      <div id="action"></div>
+      <div id="action" class="action"></div>
       <p id="feedback" class="feedback" aria-live="polite"></p>
     </section>
     <aside class="side">
-      <div class="streak"><span id="streak">0</span><small>天连续</small></div>
+      <div class="streak">
+        <span class="label">连续</span>
+        <span class="streak-num"><b id="streak">0</b><small>天</small></span>
+      </div>
+      <ol id="week" class="week" aria-label="本周"></ol>
       <dl class="stats">
         <div><dt>本周</dt><dd id="stat-week"></dd></div>
         <div><dt>累计</dt><dd id="stat-total"></dd></div>
         <div><dt>体重</dt><dd id="stat-weight"></dd></div>
       </dl>
-      <p class="hint">空格 完成今天 · 数字键 勾选动作</p>
+      <p class="hint"><kbd>1</kbd>–<kbd>4</kbd> 记一组 · <kbd>空格</kbd> 完成今天</p>
     </aside>
   </main>
 
