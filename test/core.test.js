@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toISODate, addDays, weekday, dayType, todayPlan, calcStreak, weekDone, weekView, countDone, latestWeight,
-  clampTarget, progress, completeDay, startTarget, initialProfile, normalizeProfile, mergeHistory,
+  clampTarget, progress, completeDay, climbOf, totalClimb, journey, startTarget, initialProfile, normalizeProfile, mergeHistory,
 } from '../core.js';
-import { EXERCISES, TIMEZONE } from '../plan.js';
+import { EXERCISES, TIMEZONE, LANDMARKS } from '../plan.js';
 
 const done = () => ({ type: 'train', done: true, exercises: {} });
 const historyOf = (...dates) => Object.fromEntries(dates.map((d) => [d, done()]));
@@ -126,8 +126,13 @@ test('进阶：到上限后保持不变', () => {
 test('completeDay 写入记录并更新进阶状态', () => {
   const p = initialProfile({}, '2026-09-28');
   p.exercises.push.streak = 2;
-  const r = completeDay(p, {}, '2026-09-28', { pull: true, push: true });
-  assert.deepEqual(r.entry, { type: 'train', done: true, exercises: { pull: true, push: true, crunch: false, squat: false } });
+  const r = completeDay(p, {}, '2026-09-28', { pull: 3, push: 3, crunch: 2 });
+  assert.deepEqual(r.entry, {
+    type: 'train',
+    done: true,
+    exercises: { pull: true, push: true, crunch: false, squat: false },
+    reps: { pull: 3, push: 15, crunch: 20 }, // 组数 × 当时的目标
+  });
   assert.equal(r.profile.exercises.push.target, 6);
   assert.equal(r.profile.exercises.pull.streak, 1);
   assert.equal(r.profile.exercises.crunch.streak, 0);
@@ -135,7 +140,7 @@ test('completeDay 写入记录并更新进阶状态', () => {
   assert.deepEqual(r.changes, [{ id: 'push', from: 5, to: 6 }]);
 });
 
-test('completeDay：一个都没勾也算完成打卡', () => {
+test('completeDay：没做满 3 组也算完成打卡', () => {
   const r = completeDay(initialProfile({}, '2026-09-28'), {}, '2026-09-28', {});
   assert.equal(r.entry.done, true);
 });
@@ -200,4 +205,36 @@ test('weekView 给出本周每天的状态', () => {
   assert.equal(weekView(h, '2026-10-01')[3].status, 'done');
   // 跨月的一周
   assert.deepEqual(weekView({}, '2026-02-01').map((d) => d.date.slice(5)), ['01-26', '01-27', '01-28', '01-29', '01-30', '01-31', '02-01']);
+});
+
+test('爬升：每天的米数 = 次数 × 每次抬起的高度', () => {
+  const e = { reps: { pull: 10, push: 10, crunch: 20, squat: 10 } };
+  assert.equal(climbOf(e), 10 * 0.5 + 10 * 0.3 + 20 * 0.15 + 10 * 0.4);
+  assert.equal(climbOf({ type: 'train', done: true, exercises: { push: true } }), 0); // 旧记录没有 reps
+  assert.equal(climbOf(undefined), 0);
+  assert.equal(totalClimb({ a: e, b: e }), 2 * climbOf(e));
+});
+
+test('爬升：地标位置与进度', () => {
+  assert.deepEqual(journey(0), { meters: 0, passed: null, next: LANDMARKS[0], progress: 0 });
+  const j = journey(43);
+  assert.equal(j.passed.name, '天安门城楼');
+  assert.equal(j.next.name, '黄鹤楼');
+  assert.equal(j.progress, 0.5);
+  assert.equal(journey(35).passed.name, '天安门城楼'); // 正好到达也算越过
+  const top = journey(10000);
+  assert.equal(top.passed.name, '珠穆朗玛峰');
+  assert.equal(top.next, null);
+  assert.equal(top.progress, 1);
+});
+
+test('completeDay 算出今天的爬升和越过的地标', () => {
+  const p = initialProfile({}, '2026-09-28'); // pull 1, push 5, crunch 10, squat 10
+  const history = { '2026-09-26': { type: 'train', done: true, exercises: {}, reps: { pull: 60 } } }; // 30 m
+  const r = completeDay(p, history, '2026-09-28', { pull: 3, push: 3, crunch: 3 });
+  // 3 × 0.5 + 15 × 0.3 + 30 × 0.15 = 10.5
+  assert.equal(r.climb, 10.5);
+  assert.deepEqual(r.reached.map((l) => l.name), ['天安门城楼']);
+  const r2 = completeDay(p, {}, '2026-09-28', { push: 3 });
+  assert.deepEqual(r2.reached.map((l) => l.name), ['一层楼']);
 });

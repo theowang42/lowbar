@@ -1,5 +1,5 @@
 // 纯函数：今日计划、连续天数、进阶判断。不访问 DOM，不访问存储。
-import { EXERCISES, WEEK, PROGRESS_AFTER } from './plan.js';
+import { EXERCISES, WEEK, PROGRESS_AFTER, SETS, LANDMARKS } from './plan.js';
 
 const IDS = Object.keys(EXERCISES);
 
@@ -121,26 +121,58 @@ export function progress(id, state, done) {
   };
 }
 
-// 完成今天。checks = { 动作 id: true/false }。
-// 返回 { entry, profile, changes }；今天已有记录或是休息日时返回 null（history 只追加不覆盖）。
-export function completeDay(profile, history, iso, checks) {
+// 完成今天。sets = { 动作 id: 做了几组 }，做满 SETS 组算该动作完成。
+// 返回 { entry, profile, changes, climb, reached }；今天已有记录或是休息日时返回 null（history 只追加不覆盖）。
+// climb：今天爬升的米数；reached：今天越过的地标。
+export function completeDay(profile, history, iso, sets) {
   const type = dayType(iso);
   if (type === 'rest' || history[iso]) return null;
 
   const exercises = {};
+  const reps = {};
   const states = { ...profile.exercises };
   const changes = [];
   for (const id of IDS) {
-    exercises[id] = !!checks[id];
+    const n = Math.min(SETS, Math.max(0, sets[id] || 0));
+    exercises[id] = n >= SETS;
+    if (n > 0) reps[id] = n * states[id].target;
     const r = progress(id, states[id], exercises[id]);
     states[id] = r.state;
     if (r.change) changes.push(r.change);
   }
+  const entry = { type, done: true, exercises, reps };
+  const before = totalClimb(history);
+  const climb = climbOf(entry);
   return {
-    entry: { type, done: true, exercises },
+    entry,
     profile: { ...profile, exercises: states },
     changes,
+    climb,
+    reached: LANDMARKS.filter((l) => before < l.height && before + climb >= l.height),
   };
+}
+
+// ---------- 累计爬升 ----------
+
+// 一天爬升的米数 = 每个动作的次数 × 每次抬起的高度
+export function climbOf(entry) {
+  return Object.entries(entry?.reps || {}).reduce((m, [id, n]) => m + (EXERCISES[id]?.lift || 0) * n, 0);
+}
+
+export function totalClimb(history) {
+  return Object.values(history).reduce((m, e) => m + climbOf(e), 0);
+}
+
+// 当前高度在地标路线上的位置。progress：从上一个地标到下一个地标走了多少（0–1）
+export function journey(meters) {
+  let passed = null;
+  let next = null;
+  for (const l of LANDMARKS) {
+    if (meters >= l.height) passed = l;
+    else { next = l; break; }
+  }
+  const from = passed ? passed.height : 0;
+  return { meters, passed, next, progress: next ? (meters - from) / (next.height - from) : 1 };
 }
 
 // ---------- 首次引导 ----------

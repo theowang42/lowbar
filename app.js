@@ -1,7 +1,7 @@
 // 只负责界面和事件。业务逻辑在 core.js，数据读写在 storage.js。
 import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
-  toISODate, todayPlan, calcStreak, weekDone, countDone, latestWeight,
+  toISODate, todayPlan, calcStreak, countDone, latestWeight, totalClimb, journey,
   completeDay, initialProfile, clampTarget, weekView,
 } from './core.js';
 import * as storage from './storage.js';
@@ -28,6 +28,9 @@ function show(view) {
 
 const totalSets = () => Object.values(state.sets).reduce((a, n) => a + n, 0);
 
+const pad = (i) => String(i + 1).padStart(2, '0');
+const meters = (m) => Math.floor(m).toLocaleString('zh-CN');
+
 function dots(n) {
   return Array.from({ length: SETS }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
 }
@@ -39,40 +42,42 @@ function renderHome() {
 
   if (plan.type === 'rest') {
     $('title').textContent = '休息日';
-    $('focus').textContent = '今天不练。做几个拉伸，明天继续。休息不会打断连续。';
+    $('focus').textContent = '今天不练。拉伸一下，明天继续。休息不会打断连续。';
     $('list').innerHTML = STRETCHES.map((s, i) => {
       const [name, how] = s.split('：');
-      return `<li class="card stretch"><span class="idx">${i + 1}</span><span class="main"><span class="name">${esc(name)}</span><span class="cue">${esc(how)}</span></span></li>`;
+      return `<li><div class="row-item static"><span class="idx">${pad(i)}</span>
+        <span class="main"><span class="name">${esc(name)}</span><span class="cue">${esc(how)}</span></span></div></li>`;
     }).join('');
     $('action').innerHTML = '';
   } else {
     $('title').textContent = entry ? '今天练完了' : '今天练';
-    $('focus').textContent = entry ? '' : '每做完一组，点一下对应的卡片。';
+    $('focus').textContent = entry ? '' : '每做完一组，点一下这一行。';
     $('list').innerHTML = plan.items.map((item, i) => {
       const n = entry ? (entry.exercises?.[item.id] ? SETS : 0) : state.sets[item.id] || 0;
-      const cls = ['card', n >= SETS && 'full', entry && 'locked'].filter(Boolean).join(' ');
+      const cls = ['row-item', n >= SETS && 'full', entry && 'locked'].filter(Boolean).join(' ');
+      // 已完成的那天显示当天实际做的次数，而不是进阶后的新目标
+      const target = entry?.exercises?.[item.id] && entry.reps?.[item.id] ? entry.reps[item.id] / SETS : item.target;
       return `<li><button type="button" class="${cls}" data-id="${item.id}"${entry ? ' disabled' : ''}
           aria-label="${esc(item.name)}，已做 ${n} / ${SETS} 组">
-        <span class="idx">${i + 1}</span>
+        <span class="idx">${pad(i)}</span>
         <span class="main">
           <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
           <span class="cue">${esc(item.cue)}</span>
           <span class="sets">${dots(n)}<span>${n >= SETS ? '完成' : `${n} / ${SETS} 组`}</span></span>
         </span>
-        <span class="target"><b>${item.target}</b><small>${item.unit} × ${SETS} 组</small></span>
+        <span class="target"><b>${target}</b><small>${item.unit} × ${SETS}</small></span>
       </button></li>`;
     }).join('');
     if (entry) {
-      const n = Object.values(entry.exercises || {}).filter(Boolean).length;
       $('action').innerHTML = `<div class="done">
-        <span class="mark" aria-hidden="true">✓</span>
-        <span><b>今天完成了</b><small>完成 ${n} 个动作</small></span>
+        <span class="mark" aria-hidden="true"></span>
+        <span>今天完成了</span>
         <button id="undo-btn" class="text-btn" type="button">撤销</button>
       </div>`;
     } else {
       const ready = totalSets() > 0;
       $('action').innerHTML = `<button id="complete-btn" class="btn big" type="button"${ready ? '' : ' disabled'}>完成今天</button>
-        <p class="muted center">${ready ? '没做完的动作不会影响打卡，只是目标不加。' : '至少做完一组才能打卡。'}</p>`;
+        <p class="note">${ready ? '没做满的动作不影响打卡，只是目标不加。' : '至少做完一组才能打卡。'}</p>`;
     }
   }
   renderStats();
@@ -81,11 +86,16 @@ function renderHome() {
 function renderStats() {
   const { history, today, profile } = state;
   const w = latestWeight(profile.weights);
+  const j = journey(totalClimb(history));
   $('streak').textContent = calcStreak(history, today);
   $('week').innerHTML = weekView(history, today).map((d) =>
     `<li class="day-${d.status}${d.isToday ? ' now' : ''}" title="${d.date}"><i></i><span>${d.label}</span></li>`).join('');
-  $('stat-week').textContent = `${weekDone(history, today)} / 6`;
-  $('stat-total').textContent = `${countDone(history)} 次`;
+  $('climb').textContent = meters(j.meters);
+  $('climb-bar').style.width = `${(j.progress * 100).toFixed(1)}%`;
+  $('climb-next').innerHTML = j.next
+    ? `下一站 <b>${esc(j.next.name)}</b> ${j.next.height} 米 · 还差 ${Math.ceil(j.next.height - j.meters)} 米`
+    : `已越过 <b>${esc(j.passed.name)}</b>，你站在世界之巅`;
+  $('stat-total').textContent = `${countDone(history)} 天`;
   $('stat-weight').textContent = w ? `${w} kg` : '—';
 }
 
@@ -96,8 +106,7 @@ function changeText(c) {
 
 async function complete() {
   if (totalSets() === 0) return;
-  const checks = Object.fromEntries(Object.entries(state.sets).map(([id, n]) => [id, n >= SETS]));
-  const r = completeDay(state.profile, state.history, state.today, checks);
+  const r = completeDay(state.profile, state.history, state.today, state.sets);
   if (!r) return;
   const before = calcStreak(state.history, state.today);
   await storage.saveUndo(state.today, state.profile);
@@ -107,7 +116,11 @@ async function complete() {
   state.history = { ...state.history, [state.today]: r.entry };
   renderHome();
   const after = calcStreak(state.history, state.today);
-  const lines = [`连续 ${after} 天${after > before ? '，+1' : ''}。明天见。`, ...r.changes.map(changeText)];
+  const lines = [
+    `连续 ${after} 天${after > before ? '，+1' : ''}。今天爬升 ${r.climb.toFixed(1)} 米。`,
+    ...r.reached.map((l) => `你爬过了${l.name}的高度（${l.height} 米）。`),
+    ...r.changes.map(changeText),
+  ];
   $('feedback').innerHTML = lines.map(esc).join('<br>');
 }
 
@@ -236,7 +249,7 @@ function onKey(e) {
     e.preventDefault();
     complete();
   } else if (/^[1-9]$/.test(e.key)) {
-    const card = $('list').querySelectorAll('button.card')[Number(e.key) - 1];
+    const card = $('list').querySelectorAll('button.row-item')[Number(e.key) - 1];
     if (card && !card.disabled) bump(card.dataset.id);
   }
 }
@@ -255,7 +268,7 @@ function onVisible() {
 async function init() {
   await load();
   $('list').addEventListener('click', (e) => {
-    const card = e.target.closest('button.card');
+    const card = e.target.closest('button.row-item');
     if (card) bump(card.dataset.id);
   });
   $('action').addEventListener('click', (e) => {
