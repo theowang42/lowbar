@@ -1,6 +1,6 @@
-// 离线缓存：先返回缓存，同时后台更新（下次打开即是新版本）。
+// 离线缓存：联网时用最新版本，断网时用缓存。
 // 修改资源列表时把 CACHE 版本号加一，旧缓存会被清掉。
-const CACHE = 'lowbar-v2';
+const CACHE = 'lowbar-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -27,22 +27,18 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// 联网时总是取最新版本并更新缓存；断网时才用缓存。
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(req, { ignoreSearch: true });
-    const network = fetch(req)
-      .then((res) => {
-        if (res.ok) cache.put(req, res.clone());
-        return res;
-      })
-      .catch(() => cached || cache.match('./index.html'));
-    if (cached) {
-      e.waitUntil(network);
-      return cached;
+    try {
+      const res = await fetch(req, { cache: 'no-cache' });
+      if (res.ok) cache.put(req, res.clone());
+      return res;
+    } catch {
+      return (await cache.match(req, { ignoreSearch: true })) || cache.match('./index.html');
     }
-    return network;
   })());
 });

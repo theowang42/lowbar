@@ -242,7 +242,14 @@ async function init() {
   document.addEventListener('visibilitychange', onVisible);
   show(state.profile ? 'home' : 'onboarding');
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // 新版本的 service worker 接管时自动刷新一次，让页面用上新代码
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
 }
 
 init();
