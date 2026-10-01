@@ -1,6 +1,6 @@
 // 离线缓存：先返回缓存，同时后台更新（下次打开即是新版本）。
 // 修改资源列表时把 CACHE 版本号加一，旧缓存会被清掉。
-const CACHE = 'lowbar-v1';
+const CACHE = 'lowbar-v2';
 const ASSETS = [
   './',
   './index.html',

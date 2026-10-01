@@ -6,7 +6,7 @@ import {
 } from '../core.js';
 import { EXERCISES, TIMEZONE } from '../plan.js';
 
-const done = (type = 'A') => ({ type, done: true, exercises: {} });
+const done = () => ({ type: 'train', done: true, exercises: {} });
 const historyOf = (...dates) => Object.fromEntries(dates.map((d) => [d, done()]));
 
 test('toISODate 按指定时区计算日期', () => {
@@ -24,23 +24,22 @@ test('addDays 跨月、跨年、闰年', () => {
   assert.equal(addDays('2026-03-01', -1), '2026-02-28');
 });
 
-test('A/B/休息日判断', () => {
+test('周一到周六训练，周日休息', () => {
   // 2026-09-27 是周日
   const week = ['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'];
   assert.deepEqual(week.map(weekday), [0, 1, 2, 3, 4, 5, 6]);
-  assert.deepEqual(week.map(dayType), ['rest', 'A', 'B', 'A', 'B', 'A', 'B']);
+  assert.deepEqual(week.map(dayType), ['rest', 'train', 'train', 'train', 'train', 'train', 'train']);
 });
 
-test('todayPlan 给出动作、等级与目标', () => {
-  const p = initialProfile({}, '2026-10-01');
-  const a = todayPlan(p, '2026-09-28');
-  assert.equal(a.type, 'A');
-  assert.deepEqual(a.items.map((i) => i.id), ['push', 'legs', 'core']);
-  assert.equal(a.items[0].levelName, '上斜俯卧撑');
-  assert.equal(a.items[2].unit, '秒');
-  const b = todayPlan(p, '2026-09-29');
-  assert.deepEqual(b.items.map((i) => i.id), ['row', 'pull', 'deadbug', 'bridge']);
-  assert.equal(b.items[2].perSide, true);
+test('todayPlan 每个训练日都是同样的动作，深蹲可选', () => {
+  const p = initialProfile({ pull: 5 }, '2026-10-01');
+  const t = todayPlan(p, '2026-09-28');
+  assert.equal(t.type, 'train');
+  assert.deepEqual(t.items.map((i) => i.id), ['pull', 'push', 'crunch', 'squat']);
+  assert.deepEqual(t.items.map((i) => i.optional), [false, false, false, true]);
+  assert.equal(t.items[0].name, '引体向上');
+  assert.equal(t.items[0].target, 3);
+  assert.deepEqual(todayPlan(p, '2026-10-01').items, t.items);
   assert.deepEqual(todayPlan(p, '2026-09-27'), { type: 'rest', items: [] });
 });
 
@@ -96,61 +95,49 @@ test('本周完成数、累计数、最新体重', () => {
 });
 
 test('clampTarget 上下限边界', () => {
-  assert.equal(clampTarget('push', 3), 8);
-  assert.equal(clampTarget('push', 8), 8);
-  assert.equal(clampTarget('push', 15), 15);
-  assert.equal(clampTarget('push', 99), 15);
-  assert.equal(clampTarget('core', 'abc'), 20);
+  assert.equal(clampTarget('push', 3), 5);
+  assert.equal(clampTarget('push', 5), 5);
+  assert.equal(clampTarget('push', 40), 40);
+  assert.equal(clampTarget('push', 99), 40);
+  assert.equal(clampTarget('pull', 0), 1);
+  assert.equal(clampTarget('crunch', 'abc'), 10);
 });
 
 test('进阶：连续 3 次完成目标 +1', () => {
-  let s = { level: 1, target: 10, streak: 0 };
-  let r = progress('push', s, true);
-  assert.deepEqual(r, { state: { level: 1, target: 10, streak: 1 }, change: null });
+  let r = progress('push', { target: 10, streak: 0 }, true);
+  assert.deepEqual(r, { state: { target: 10, streak: 1 }, change: null });
   r = progress('push', r.state, true);
   assert.equal(r.change, null);
   r = progress('push', r.state, true);
-  assert.deepEqual(r.state, { level: 1, target: 11, streak: 0 });
-  assert.deepEqual(r.change, { id: 'push', kind: 'target', from: 10, to: 11 });
+  assert.deepEqual(r.state, { target: 11, streak: 0 });
+  assert.deepEqual(r.change, { id: 'push', from: 10, to: 11 });
 });
 
-test('进阶：按秒计的动作 +5 秒，且不超过上限', () => {
-  let r = progress('core', { level: 1, target: 30, streak: 2 }, true);
-  assert.equal(r.state.target, 35);
-  r = progress('core', { level: 1, target: 58, streak: 2 }, true);
-  assert.equal(r.state.target, 60);
+test('进阶：没完成计数清零，目标不变', () => {
+  const r = progress('pull', { target: 6, streak: 2 }, false);
+  assert.deepEqual(r, { state: { target: 6, streak: 0 }, change: null });
 });
 
-test('进阶：没完成清零计数，不降级', () => {
-  const r = progress('push', { level: 2, target: 12, streak: 2 }, false);
-  assert.deepEqual(r, { state: { level: 2, target: 12, streak: 0 }, change: null });
-});
-
-test('升级：达到上限后再满足条件进入下一等级，目标回到下限', () => {
-  const r = progress('row', { level: 1, target: 15, streak: 2 }, true);
-  assert.deepEqual(r.state, { level: 2, target: 8, streak: 0 });
-  assert.deepEqual(r.change, { id: 'row', kind: 'level', from: 1, to: 2 });
-});
-
-test('升级：最高等级的上限保持不变', () => {
-  const r = progress('pull', { level: 3, target: 10, streak: 2 }, true);
-  assert.deepEqual(r, { state: { level: 3, target: 10, streak: 0 }, change: null });
-  const r2 = progress('bridge', { level: 1, target: 20, streak: 2 }, true);
-  assert.equal(r2.state.level, 1);
-  assert.equal(r2.change, null);
+test('进阶：到上限后保持不变', () => {
+  const r = progress('pull', { target: 20, streak: 2 }, true);
+  assert.deepEqual(r, { state: { target: 20, streak: 0 }, change: null });
 });
 
 test('completeDay 写入记录并更新进阶状态', () => {
   const p = initialProfile({}, '2026-09-28');
   p.exercises.push.streak = 2;
-  const r = completeDay(p, {}, '2026-09-28', { push: true, core: true });
-  assert.deepEqual(r.entry, { type: 'A', done: true, exercises: { push: true, legs: false, core: true } });
-  assert.equal(r.profile.exercises.push.target, 9);
-  assert.equal(r.profile.exercises.legs.streak, 0);
-  assert.equal(r.profile.exercises.core.streak, 1);
-  assert.equal(r.profile.exercises.row, p.exercises.row); // B 天动作不受影响
-  assert.equal(p.exercises.push.target, 8); // 不修改入参
-  assert.deepEqual(r.changes, [{ id: 'push', kind: 'target', from: 8, to: 9 }]);
+  const r = completeDay(p, {}, '2026-09-28', { pull: true, push: true });
+  assert.deepEqual(r.entry, { type: 'train', done: true, exercises: { pull: true, push: true, crunch: false, squat: false } });
+  assert.equal(r.profile.exercises.push.target, 6);
+  assert.equal(r.profile.exercises.pull.streak, 1);
+  assert.equal(r.profile.exercises.crunch.streak, 0);
+  assert.equal(p.exercises.push.target, 5); // 不修改入参
+  assert.deepEqual(r.changes, [{ id: 'push', from: 5, to: 6 }]);
+});
+
+test('completeDay：一个都没勾也算完成打卡', () => {
+  const r = completeDay(initialProfile({}, '2026-09-28'), {}, '2026-09-28', {});
+  assert.equal(r.entry.done, true);
 });
 
 test('completeDay：休息日或已有记录时返回 null（只追加不覆盖）', () => {
@@ -161,26 +148,17 @@ test('completeDay：休息日或已有记录时返回 null（只追加不覆盖�
 
 test('首次引导：起始目标 = 最大值 60%，限制在上下限之间', () => {
   assert.equal(startTarget('push', 20), 12);
-  assert.equal(startTarget('push', 5), 8);
-  assert.equal(startTarget('push', 40), 15);
-  assert.equal(startTarget('core', 45), 27);
-  const p = initialProfile({ weight: 70, push: 20, legs: 20, row: 10, pull: 3, core: 100 }, '2026-10-01');
+  assert.equal(startTarget('push', 4), 5);
+  assert.equal(startTarget('push', 100), 40);
+  assert.equal(startTarget('pull', 1), 1);
+  const p = initialProfile({ weight: 70, pull: 6, push: 25, crunch: 30, squat: '' }, '2026-10-01');
   assert.deepEqual(p.weights, { '2026-10-01': 70 });
-  assert.deepEqual(p.exercises.push, { level: 1, target: 12, streak: 0 });
-  assert.deepEqual(p.exercises.legs, { level: 1, target: 12, streak: 0 });
-  assert.deepEqual(p.exercises.row, { level: 1, target: 8, streak: 0 });
-  assert.deepEqual(p.exercises.pull, { level: 1, target: 4, streak: 0 });
-  assert.deepEqual(p.exercises.core, { level: 1, target: 60, streak: 0 });
-  // 未测试的动作从等级 1 下限开始
-  assert.deepEqual(p.exercises.deadbug, { level: 1, target: EXERCISES.deadbug.min, streak: 0 });
-  assert.deepEqual(p.exercises.bridge, { level: 1, target: EXERCISES.bridge.min, streak: 0 });
-});
-
-test('首次引导：腿部测试值超过上限直接从等级 2 开始', () => {
-  const p = initialProfile({ legs: 21 }, '2026-10-01');
-  assert.deepEqual(p.exercises.legs, { level: 2, target: EXERCISES.legs.min, streak: 0 });
-  const q = initialProfile({ legs: 20 }, '2026-10-01');
-  assert.equal(q.exercises.legs.level, 1);
+  assert.deepEqual(p.exercises, {
+    pull: { target: 4, streak: 0 },
+    push: { target: 15, streak: 0 },
+    crunch: { target: 18, streak: 0 },
+    squat: { target: EXERCISES.squat.min, streak: 0 }, // 没测的从下限开始
+  });
 });
 
 test('首次引导：没填体重时不记录', () => {
@@ -190,19 +168,22 @@ test('首次引导：没填体重时不记录', () => {
 test('normalizeProfile 补全缺失并修正越界', () => {
   const p = normalizeProfile({
     weights: { '2026-10-01': '68', bad: 1 },
-    exercises: { push: { level: 9, target: 100, streak: 1 }, legs: { level: 0, target: 1 } },
+    exercises: { push: { level: 2, target: 100, streak: 1 }, legs: { target: 12 } },
   });
   assert.deepEqual(p.weights, { '2026-10-01': 68 });
-  assert.deepEqual(p.exercises.push, { level: 3, target: 15, streak: 1 });
-  assert.deepEqual(p.exercises.legs, { level: 1, target: 10, streak: 0 });
-  assert.deepEqual(p.exercises.bridge, { level: 1, target: 12, streak: 0 });
+  assert.deepEqual(p.exercises, {
+    pull: { target: 1, streak: 0 },
+    push: { target: 40, streak: 1 },
+    crunch: { target: 10, streak: 0 },
+    squat: { target: 10, streak: 0 },
+  });
 });
 
 test('mergeHistory 只追加，已有日期不被覆盖', () => {
-  const base = { '2026-10-01': done('B') };
+  const base = { '2026-10-01': done() };
   const merged = mergeHistory(base, {
-    '2026-10-01': { type: 'B', done: false, exercises: {} },
-    '2026-09-30': done('A'),
+    '2026-10-01': { type: 'train', done: false, exercises: {} },
+    '2026-09-30': done(),
     junk: done(),
   });
   assert.deepEqual(Object.keys(merged).sort(), ['2026-09-30', '2026-10-01']);

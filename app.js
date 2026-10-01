@@ -1,5 +1,5 @@
 // 只负责界面和事件。业务逻辑在 core.js，数据读写在 storage.js。
-import { EXERCISES, DAYS, SETS, STRETCHES, TESTS } from './plan.js';
+import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
   toISODate, todayPlan, calcStreak, weekDone, countDone, latestWeight,
   completeDay, initialProfile, clampTarget,
@@ -27,7 +27,7 @@ function show(view) {
 // ---------- 首页 ----------
 
 function dose(item) {
-  return `${SETS} × ${item.target} ${item.unit}${item.perSide ? '（每侧）' : ''}`;
+  return `${SETS} 组 × ${item.target} ${item.unit}`;
 }
 
 function renderHome() {
@@ -41,15 +41,15 @@ function renderHome() {
     $('list').innerHTML = STRETCHES.map((s) => `<li class="item stretch">${esc(s)}</li>`).join('');
     $('action').innerHTML = '';
   } else {
-    $('title').textContent = DAYS[plan.type].label;
-    $('focus').textContent = DAYS[plan.type].focus;
+    $('title').textContent = '今天练';
+    $('focus').textContent = '每组做到目标次数就勾上。约 15 分钟。';
     $('list').innerHTML = plan.items.map((item, i) => {
       const checked = entry ? entry.exercises?.[item.id] : state.checks[item.id];
       return `<li>
         <label class="item">
           <input type="checkbox" data-id="${item.id}"${checked ? ' checked' : ''}${entry ? ' disabled' : ''}>
           <span class="body">
-            <span class="name">${esc(item.levelName)}${item.levelCount > 1 ? `<span class="tag">等级 ${item.level}</span>` : ''}</span>
+            <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
             <span class="dose">${esc(dose(item))}</span>
             <span class="cue">${esc(item.cue)}</span>
           </span>
@@ -75,8 +75,7 @@ function renderStats() {
 
 function changeText(c) {
   const ex = EXERCISES[c.id];
-  if (c.kind === 'target') return `${ex.name}：目标 ${c.from} → ${c.to} ${ex.unit}`;
-  return `${ex.name}：升到等级 ${c.to} · ${ex.levels[c.to - 1].name}`;
+  return `${ex.name}：目标 ${c.from} → ${c.to} ${ex.unit}`;
 }
 
 async function complete() {
@@ -105,13 +104,10 @@ function toggle(id, value) {
 
 function renderOnboarding() {
   $('title').textContent = '开始之前';
-  const tests = TESTS.map((id, i) => {
-    const ex = EXERCISES[id];
-    const lv = ex.levels[0];
-    const unit = ex.unit === '秒' ? '最多坚持几秒' : '一组最多几次';
+  const tests = Object.values(EXERCISES).map((ex, i) => {
     return `<label class="row">
-      <span><span><b>${i + 2}. ${esc(lv.name)}</b>：${unit}</span><small>${esc(lv.cue)}</small></span>
-      <input name="${id}" type="number" inputmode="numeric" min="0" max="999" required>
+      <span><span><b>${i + 2}. ${esc(ex.name)}</b>：一组最多几次${ex.optional ? '（可不填）' : ''}</span><small>${esc(ex.cue)}</small></span>
+      <input name="${ex.id}" type="number" inputmode="numeric" min="0" max="999"${ex.optional ? '' : ' required'}>
     </label>`;
   }).join('');
   $('onboarding-form').innerHTML = `
@@ -138,12 +134,9 @@ function renderSettings() {
   $('weight-form').weight.value = latestWeight(state.profile.weights) ?? '';
   $('exercise-fields').innerHTML = Object.values(EXERCISES).map((ex) => {
     const s = state.profile.exercises[ex.id];
-    const options = ex.levels.map((lv, i) =>
-      `<option value="${i + 1}"${s.level === i + 1 ? ' selected' : ''}>等级 ${i + 1} · ${esc(lv.name)}</option>`).join('');
     return `<fieldset class="ex">
       <legend>${esc(ex.name)}</legend>
-      <select name="${ex.id}-level"${ex.levels.length === 1 ? ' disabled' : ''}>${options}</select>
-      <label><input name="${ex.id}-target" type="number" inputmode="numeric" min="${ex.min}" max="${ex.max}" step="1" value="${s.target}"> ${ex.unit}
+      <label>每组 <input name="${ex.id}-target" type="number" inputmode="numeric" min="${ex.min}" max="${ex.max}" step="1" value="${s.target}"> ${ex.unit}
         <small>（${ex.min}–${ex.max}）</small></label>
     </fieldset>`;
   }).join('');
@@ -164,10 +157,8 @@ async function saveExercises(e) {
   const exercises = {};
   for (const ex of Object.values(EXERCISES)) {
     const old = state.profile.exercises[ex.id];
-    const level = ex.levels.length === 1 ? 1 : Number(f[`${ex.id}-level`].value);
     const target = clampTarget(ex.id, f[`${ex.id}-target`].value);
-    const same = level === old.level && target === old.target;
-    exercises[ex.id] = { level, target, streak: same ? old.streak : 0 };
+    exercises[ex.id] = { target, streak: target === old.target ? old.streak : 0 };
   }
   state.profile = { ...state.profile, exercises };
   await storage.saveProfile(state.profile);
@@ -215,7 +206,7 @@ function onKey(e) {
   if (e.key === ' ') {
     e.preventDefault();
     complete();
-  } else if (/^[1-6]$/.test(e.key)) {
+  } else if (/^[1-9]$/.test(e.key)) {
     const box = $('list').querySelectorAll('input[type="checkbox"]')[Number(e.key) - 1];
     if (box && !box.disabled) toggle(box.dataset.id, !box.checked);
   }

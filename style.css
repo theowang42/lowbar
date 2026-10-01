@@ -183,9 +183,8 @@ input[type="number"] { width: 6em; flex: none; }
 select { max-width: 100%; }
 input:focus-visible, select:focus-visible { outline: none; border-color: var(--accent); }
 
-.ex { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
-.ex legend { float: left; width: 100%; font-weight: 700; padding: 0; margin-bottom: 4px; }
-.ex select { flex: 1 1 260px; }
+.ex { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.ex legend { float: left; font-weight: 700; padding: 0; }
 .ex small { color: var(--muted); }
 
 .buttons { display: flex; flex-wrap: wrap; gap: 12px; }

@@ -1,5 +1,6 @@
 // 数据读写的唯一入口。v0.1 使用 localStorage；接口都是 async，方便 v0.2 加 GitHub 同步。
 import { mergeHistory, normalizeProfile } from './core.js';
+import { EXERCISES } from './plan.js';
 
 const KEYS = { profile: 'lowbar.profile', history: 'lowbar.history' };
 
@@ -16,10 +17,11 @@ function write(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-// 还没完成首次引导时返回 null
+// 还没完成首次引导时返回 null；训练计划换了动作（缺少某个动作）时也返回 null，重新引导
 export async function loadProfile() {
   const p = read(KEYS.profile, null);
-  return p ? normalizeProfile(p) : null;
+  if (!p || !Object.keys(EXERCISES).every((id) => p.exercises?.[id])) return null;
+  return normalizeProfile(p);
 }
 
 export async function saveProfile(profile) {

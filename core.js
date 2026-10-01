@@ -1,5 +1,7 @@
 // 纯函数：今日计划、连续天数、进阶判断。不访问 DOM，不访问存储。
-import { EXERCISES, DAYS, WEEK, TESTS, PROGRESS_AFTER } from './plan.js';
+import { EXERCISES, WEEK, PROGRESS_AFTER } from './plan.js';
+
+const IDS = Object.keys(EXERCISES);
 
 // ---------- 日期（YYYY-MM-DD） ----------
 
@@ -28,33 +30,18 @@ export function weekday(iso) {
 
 // ---------- 今日计划 ----------
 
-// 'A' | 'B' | 'rest'
+// 'train' | 'rest'
 export function dayType(iso) {
   return WEEK[weekday(iso)];
 }
 
-export function exercisesFor(type) {
-  return type === 'rest' ? [] : DAYS[type].exercises;
-}
-
-// 今天要练的动作，带当前等级与目标
+// 今天要练的动作，带当前目标
 export function todayPlan(profile, iso) {
   const type = dayType(iso);
-  const items = exercisesFor(type).map((id) => {
+  if (type === 'rest') return { type, items: [] };
+  const items = IDS.map((id) => {
     const ex = EXERCISES[id];
-    const state = profile.exercises[id];
-    const level = ex.levels[state.level - 1];
-    return {
-      id,
-      name: ex.name,
-      unit: ex.unit,
-      level: state.level,
-      levelCount: ex.levels.length,
-      levelName: level.name,
-      cue: level.cue,
-      perSide: !!level.perSide,
-      target: state.target,
-    };
+    return { id, name: ex.name, unit: ex.unit, cue: ex.cue, optional: !!ex.optional, target: profile.exercises[id].target };
   });
   return { type, items };
 }
@@ -67,7 +54,7 @@ export function calcStreak(history, today) {
   let d = history[today]?.done ? today : addDays(today, -1);
   let n = 0;
   for (;;) {
-    if (weekday(d) === 0) {
+    if (dayType(d) === 'rest') {
       d = addDays(d, -1);
     } else if (history[d]?.done) {
       n++;
@@ -107,29 +94,17 @@ export function clampTarget(id, value) {
 }
 
 // 一次训练后某个动作的新状态。done = 3 组都达到目标。
-// 返回 { state, change }，change 为 null 或 { id, kind: 'target' | 'level', from, to }。
+// 连续 PROGRESS_AFTER 次完成 → 目标 +1（不超过上限）；没完成 → 计数清零，目标不变。
+// 返回 { state, change }，change 为 null 或 { id, from, to }。
 export function progress(id, state, done) {
-  const ex = EXERCISES[id];
   if (!done) return { state: { ...state, streak: 0 }, change: null };
-
   const streak = (state.streak || 0) + 1;
   if (streak < PROGRESS_AFTER) return { state: { ...state, streak }, change: null };
-
-  if (state.target < ex.max) {
-    const to = Math.min(ex.max, state.target + ex.step);
-    return {
-      state: { level: state.level, target: to, streak: 0 },
-      change: { id, kind: 'target', from: state.target, to },
-    };
-  }
-  if (state.level < ex.levels.length) {
-    return {
-      state: { level: state.level + 1, target: ex.min, streak: 0 },
-      change: { id, kind: 'level', from: state.level, to: state.level + 1 },
-    };
-  }
-  // 已经是最高等级的上限：保持不变
-  return { state: { ...state, streak: 0 }, change: null };
+  const to = Math.min(EXERCISES[id].max, state.target + 1);
+  return {
+    state: { target: to, streak: 0 },
+    change: to > state.target ? { id, from: state.target, to } : null,
+  };
 }
 
 // 完成今天。checks = { 动作 id: true/false }。
@@ -141,7 +116,7 @@ export function completeDay(profile, history, iso, checks) {
   const exercises = {};
   const states = { ...profile.exercises };
   const changes = [];
-  for (const id of exercisesFor(type)) {
+  for (const id of IDS) {
     exercises[id] = !!checks[id];
     const r = progress(id, states[id], exercises[id]);
     states[id] = r.state;
@@ -161,20 +136,12 @@ export function startTarget(id, max) {
   return clampTarget(id, Number(max) * 0.6);
 }
 
-// tests = { weight, push, legs, row, pull, core }，均为测试的最大值
+// tests = { weight, pull, push, crunch, squat }，均为测试的最大值；没填的从下限开始
 export function initialProfile(tests, iso) {
   const exercises = {};
-  for (const id of Object.keys(EXERCISES)) {
-    exercises[id] = { level: 1, target: EXERCISES[id].min, streak: 0 };
-  }
-  for (const id of TESTS) {
+  for (const id of IDS) {
     const max = Number(tests[id]);
-    if (!(max > 0)) continue;
-    if (id === 'legs' && max > EXERCISES.legs.max) {
-      exercises.legs = { level: 2, target: EXERCISES.legs.min, streak: 0 };
-    } else {
-      exercises[id].target = startTarget(id, max);
-    }
+    exercises[id] = { target: max > 0 ? startTarget(id, max) : EXERCISES[id].min, streak: 0 };
   }
   const weight = Number(tests.weight);
   return {
@@ -189,12 +156,10 @@ export function normalizeProfile(p) {
   for (const [d, kg] of Object.entries(p?.weights || {})) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(d) && Number(kg) > 0) out.weights[d] = Number(kg);
   }
-  for (const [id, ex] of Object.entries(EXERCISES)) {
+  for (const id of IDS) {
     const s = p?.exercises?.[id] || {};
-    const level = Math.min(ex.levels.length, Math.max(1, Math.round(Number(s.level)) || 1));
     out.exercises[id] = {
-      level,
-      target: s.target === undefined ? ex.min : clampTarget(id, s.target),
+      target: s.target === undefined ? EXERCISES[id].min : clampTarget(id, s.target),
       streak: Math.max(0, Math.round(Number(s.streak)) || 0),
     };
   }
