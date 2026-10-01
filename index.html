@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>lowbar</title>
+  <meta name="description" content="每天打开就知道今天练什么">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="lowbar">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <div id="date" class="date"></div>
+      <h1 id="title" class="title"></h1>
+    </div>
+    <button id="settings-btn" class="icon-btn" type="button" aria-label="设置" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2-1.2L14.5 3h-5l-.4 2.6a7.5 7.5 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.5 7.5 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
+    </button>
+    <button id="back-btn" class="text-btn" type="button" hidden>返回</button>
+  </header>
+
+  <main id="home" class="layout" hidden>
+    <section class="today">
+      <p id="focus" class="focus"></p>
+      <ol id="list" class="list"></ol>
+      <div id="action"></div>
+      <p id="feedback" class="feedback" aria-live="polite"></p>
+    </section>
+    <aside class="side">
+      <div class="streak"><span id="streak">0</span><small>天连续</small></div>
+      <dl class="stats">
+        <div><dt>本周</dt><dd id="stat-week"></dd></div>
+        <div><dt>累计</dt><dd id="stat-total"></dd></div>
+        <div><dt>体重</dt><dd id="stat-weight"></dd></div>
+      </dl>
+      <p class="hint">空格 完成今天 · 数字键 勾选动作</p>
+    </aside>
+  </main>
+
+  <main id="onboarding" class="page" hidden>
+    <p class="lead">第一次使用，先花 5 分钟测一下你现在的水平。每项做一组，做到做不动为止，记下次数。</p>
+    <form id="onboarding-form" class="form"></form>
+  </main>
+
+  <main id="settings" class="page" hidden>
+    <form id="weight-form" class="form">
+      <h2>体重</h2>
+      <label class="row"><span>今天的体重（kg）</span><input name="weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" required></label>
+      <button class="btn" type="submit">记录</button>
+    </form>
+    <form id="exercise-form" class="form">
+      <h2>动作等级与目标</h2>
+      <div id="exercise-fields"></div>
+      <button class="btn" type="submit">保存</button>
+    </form>
+    <div class="form">
+      <h2>数据</h2>
+      <p class="muted">导入时：设置会被替换，训练记录只追加，已有的日期不会被覆盖。</p>
+      <div class="buttons">
+        <button id="export-btn" class="btn secondary" type="button">导出 JSON</button>
+        <label class="btn secondary">导入 JSON<input id="import-input" type="file" accept="application/json,.json" hidden></label>
+      </div>
+    </div>
+    <p id="settings-status" class="feedback" aria-live="polite"></p>
+  </main>
+</body>
+</html>
