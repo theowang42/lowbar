@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toISODate, addDays, weekday, dayType, todayPlan, calcStreak, weekDone, weekView, countDone, latestWeight,
-  clampTarget, progress, completeDay, climbOf, totalClimb, journey, startTarget, initialProfile, normalizeProfile, mergeHistory,
+  clampTarget, progress, completeDay, currentExercise, climbOf, totalClimb, journey, startTarget, initialProfile, normalizeProfile, mergeHistory,
 } from '../core.js';
 import { EXERCISES, TIMEZONE, LANDMARKS } from '../plan.js';
 
@@ -237,4 +237,14 @@ test('completeDay 算出今天的爬升和越过的地标', () => {
   assert.deepEqual(r.reached.map((l) => l.name), ['天安门城楼']);
   const r2 = completeDay(p, {}, '2026-09-28', { push: 3 });
   assert.deepEqual(r2.reached.map((l) => l.name), ['一层楼']);
+});
+
+test('currentExercise：先做必做动作，最后才是可选动作', () => {
+  const items = todayPlan(initialProfile({}, '2026-09-28'), '2026-09-28').items;
+  assert.equal(currentExercise(items, {}), 'pull');
+  assert.equal(currentExercise(items, { pull: 2 }), 'pull');
+  assert.equal(currentExercise(items, { pull: 3 }), 'push');
+  assert.equal(currentExercise(items, { pull: 3, push: 3, crunch: 1, squat: 3 }), 'crunch');
+  assert.equal(currentExercise(items, { pull: 3, push: 3, crunch: 3 }), 'squat');
+  assert.equal(currentExercise(items, { pull: 3, push: 3, crunch: 3, squat: 3 }), null);
 });

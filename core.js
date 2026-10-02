@@ -46,6 +46,12 @@ export function todayPlan(profile, iso) {
   return { type, items };
 }
 
+// 现在该做哪个动作：按顺序第一个没做满的必做动作；必做的都做满了，再轮到可选动作
+export function currentExercise(items, sets) {
+  const open = items.filter((i) => (sets[i.id] || 0) < SETS);
+  return (open.find((i) => !i.optional) || open[0])?.id ?? null;
+}
+
 // ---------- 连续天数 ----------
 
 // 从今天往回数连续完成的训练日。周日不练不算断，也不计数。

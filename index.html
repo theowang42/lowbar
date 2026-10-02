@@ -6,13 +6,14 @@
   <title>lowbar</title>
   <meta name="description" content="每天打开就知道今天练什么">
   <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="lowbar">
   <link rel="stylesheet" href="style.css">
+  <script>try { const t = localStorage.getItem('lowbar.theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -21,10 +22,15 @@
       <p id="date" class="date"></p>
       <h1 id="title" class="title"></h1>
     </div>
+    <div class="tools">
+    <button id="theme-btn" class="icon-btn" type="button" aria-label="切换白天 / 黑夜">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"/></svg>
+    </button>
     <button id="settings-btn" class="icon-btn" type="button" aria-label="设置" hidden>
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2-1.2L14.5 3h-5l-.4 2.6a7.5 7.5 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.5 7.5 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
     </button>
     <button id="back-btn" class="text-btn" type="button" hidden>返回</button>
+    </div>
   </header>
 
   <main id="home" class="layout" hidden>

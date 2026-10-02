@@ -2,7 +2,7 @@
 import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
   toISODate, todayPlan, calcStreak, countDone, latestWeight, totalClimb, journey,
-  completeDay, initialProfile, clampTarget, weekView,
+  completeDay, initialProfile, clampTarget, weekView, currentExercise,
 } from './core.js';
 import * as storage from './storage.js';
 
@@ -50,11 +50,15 @@ function renderHome() {
     }).join('');
     $('action').innerHTML = '';
   } else {
+    const required = plan.items.filter((i) => !i.optional).length * SETS;
+    const done = plan.items.filter((i) => !i.optional).reduce((a, i) => a + Math.min(SETS, state.sets[i.id] || 0), 0);
+    const current = entry ? null : currentExercise(plan.items, state.sets);
     $('title').textContent = entry ? '今天练完了' : '今天练';
-    $('focus').textContent = entry ? '' : '每做完一组，点一下这一行。';
+    $('focus').innerHTML = entry ? '' : `<b>${done}</b> / ${required} 组`;
     $('list').innerHTML = plan.items.map((item, i) => {
       const n = entry ? (entry.exercises?.[item.id] ? SETS : 0) : state.sets[item.id] || 0;
-      const cls = ['row-item', n >= SETS && 'full', entry && 'locked'].filter(Boolean).join(' ');
+      const active = item.id === current;
+      const cls = ['row-item', n >= SETS && 'full', active && 'active', entry && 'locked'].filter(Boolean).join(' ');
       // 已完成的那天显示当天实际做的次数，而不是进阶后的新目标
       const target = entry?.exercises?.[item.id] && entry.reps?.[item.id] ? entry.reps[item.id] / SETS : item.target;
       return `<li><button type="button" class="${cls}" data-id="${item.id}"${entry ? ' disabled' : ''}
@@ -62,8 +66,8 @@ function renderHome() {
         <span class="idx">${pad(i)}</span>
         <span class="main">
           <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
-          <span class="cue">${esc(item.cue)}</span>
-          <span class="sets">${dots(n)}<span>${n >= SETS ? '完成' : `${n} / ${SETS} 组`}</span></span>
+          ${active ? `<span class="cue">${esc(item.cue)}</span>` : ''}
+          <span class="sets">${dots(n)}<span>${n >= SETS ? '完成' : active ? `第 ${n + 1} 组 · 做完点这里` : `${n} / ${SETS} 组`}</span></span>
         </span>
         <span class="target"><b>${target}</b><small>${item.unit} × ${SETS}</small></span>
       </button></li>`;
@@ -233,6 +237,16 @@ async function importJSON(e) {
   }
 }
 
+// ---------- 主题 ----------
+
+function toggleTheme() {
+  const root = document.documentElement;
+  const current = root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = current === 'dark' ? 'light' : 'dark';
+  root.dataset.theme = next;
+  storage.saveTheme(next);
+}
+
 // ---------- 启动与事件 ----------
 
 async function load() {
@@ -276,6 +290,7 @@ async function init() {
     if (e.target.id === 'undo-btn') undo();
   });
   $('settings-btn').addEventListener('click', () => show('settings'));
+  $('theme-btn').addEventListener('click', toggleTheme);
   $('back-btn').addEventListener('click', () => show('home'));
   $('onboarding-form').addEventListener('submit', submitOnboarding);
   $('weight-form').addEventListener('submit', saveWeight);

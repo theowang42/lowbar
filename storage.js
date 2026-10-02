@@ -66,6 +66,15 @@ export async function saveDraft(iso, sets) {
   write(KEYS.draft, { date: iso, sets });
 }
 
+// 界面主题：'light' | 'dark' | null（跟随系统）。存原始字符串，index.html 的内联脚本在页面绘制前读取，避免闪烁
+const THEME_KEY = 'lowbar.theme';
+
+export function saveTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {}
+}
+
 export async function exportData() {
   return {
     app: 'lowbar',
