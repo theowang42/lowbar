@@ -1,158 +1,247 @@
-// 养成小人：24×24 的像素画，两帧交替做出 Game Boy 式的逐帧动画。
-// 只返回 SVG 字符串，不访问 DOM；颜色全部来自 CSS（currentColor / --accent / --faint / --muted）。
+// 养成小人：1-bit 像素画（Playdate 式）。剪影自动描边，背光侧网点阴影，两帧逐帧动画。
+// 场景里有一根矮单杠。只返回 SVG 字符串，不访问 DOM；颜色全部来自 CSS。
 
-const W = 24;
+// 姿势用 44×36 的设计坐标写，渲染时放大 K 倍到 66×54 像素
+const K = 1.5;
+const W = 66;
+const H = 54;
+const GROUND = 33;
+const BAR_Y = 11;
+const BAR_L = 22.5;
+const BAR_R = 42.5;
 
-// 不同阶段的身材：tw 躯干半宽，sw 肩半宽，t 四肢粗细
+// 像素值：0 透明，1 墨色，2 强调色，3 地面，4 灰，5 底色（用来遮住后面的东西）
+const INK = 1;
+const ACC = 2;
+const GND = 3;
+const GRAY = 4;
+const PAPER = 5;
+
+// 不同阶段的身材：arm/leg 四肢半径，tw 躯干半宽，sw 肩半宽
 const BUILDS = [
-  { tw: 2, sw: 2, t: 1 },
-  { tw: 2, sw: 3, t: 1 },
-  { tw: 2, sw: 3, t: 2 },
-  { tw: 3, sw: 4, t: 2 },
-  { tw: 3, sw: 5, t: 2 },
-  { tw: 3, sw: 5, t: 2 },
+  { arm: 1.1, leg: 1.3, tw: 2.6, sw: 2.6 },
+  { arm: 1.4, leg: 1.6, tw: 3.0, sw: 3.0 },
+  { arm: 1.7, leg: 1.8, tw: 3.4, sw: 3.5 },
+  { arm: 2.0, leg: 2.0, tw: 3.8, sw: 4.2 },
+  { arm: 2.4, leg: 2.2, tw: 4.3, sw: 5.0 },
+  { arm: 2.4, leg: 2.2, tw: 4.3, sw: 5.0 },
 ];
 
-// 像素值：1 主色，2 强调色（橙），3 地面（极淡），4 次要（灰）
+// ---------- 几何 ----------
+
+function segDist(px, py, [ax, ay], [bx, by]) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
+const k = ([x, y]) => [x * K, y * K];
+const capsule = (a, b, r) => { const A = k(a); const B = k(b); return (x, y) => segDist(x + 0.5, y + 0.5, A, B) <= r * K; };
+const circle = (c, r) => { const [cx, cy] = k(c); return (x, y) => Math.hypot(x + 0.5 - cx, y + 0.5 - cy) <= r * K; };
+const union = (...fs) => (x, y) => fs.some((f) => f(x, y));
+const add = ([x, y], [dx, dy]) => [x + dx, y + dy];
+
+// ---------- 画布 ----------
+
 function canvas() {
-  const g = Array.from({ length: W }, () => new Array(W).fill(0));
-  const set = (x, y, v = 1) => { if (x >= 0 && x < W && y >= 0 && y < W) g[y][x] = v; };
-  const rect = (x, y, w, h, v = 1) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(x + i, y + j, v); };
-  const draw = (rows, x, y, v = 1) => rows.forEach((r, j) => [...r].forEach((c, i) => { if (c === '#') set(x + i, y + j, v); }));
-  return { g, set, rect, draw };
+  const g = Array.from({ length: H }, () => new Array(W).fill(0));
+  const set = (x, y, v) => { if (x >= 0 && x < W && y >= 0 && y < H) g[y][x] = v; };
+  // 一个部件：剪影边缘描墨线，内部按 fill 上色；shade 时背光（右下）一侧打网点
+  const part = (mask, fill, shade = true) => {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!mask(x, y)) continue;
+      const edge = !mask(x - 1, y) || !mask(x + 1, y) || !mask(x, y - 1) || !mask(x, y + 1);
+      if (edge) { set(x, y, INK); continue; }
+      const dark = shade && (!mask(x + 3, y + 1) || !mask(x + 1, y + 3) || !mask(x + 2, y + 2));
+      set(x, y, dark && (x + y) % 2 === 0 ? INK : fill(x, y));
+    }
+  };
+  return { g, set, part };
 }
 
-const HEAD = ['..####..', '.######.', '########', '########', '########', '.######.', '..####..'];
+const PLAIN = () => PAPER;
+const SOLID = () => INK;
 
-// 脸是在实心头上挖出的空像素
-const FACES = {
-  open: [[2, 3], [5, 3]],
-  blink: [[2, 4], [5, 4]],
-  smile: [[2, 3], [5, 3], [3, 5], [4, 5]],
-  closed: [[1, 4], [2, 4], [5, 4], [6, 4]],
-  joy: [[2, 2], [1, 3], [3, 3], [5, 2], [4, 3], [6, 3], [3, 5], [4, 5]],
-};
+// ---------- 场景 ----------
 
-function head(c, x, y, face, band) {
-  c.draw(HEAD, x, y);
-  for (const [i, j] of FACES[face]) c.set(x + i, y + j, 0);
-  if (band) c.rect(x, y + 1, 8, 1, 2);
+function scenery(c) {
+  const gy = Math.round((GROUND + 0.6) * K);
+  for (let x = 1; x < W - 1; x += 2) c.set(x, gy, GND);
+  // 矮单杠放在右边：两根柱子和一根横杠，画在小人后面
+  c.part(union(capsule([BAR_L, BAR_Y], [BAR_L, GROUND + 0.3], 0.8), capsule([BAR_R, BAR_Y], [BAR_R, GROUND + 0.3], 0.8)), SOLID, false);
+  c.part(capsule([BAR_L - 1.4, BAR_Y], [BAR_R + 1.4, BAR_Y], 0.9), SOLID, false);
 }
 
-const Z = ['####', '..#.', '.#..', '####'];
-const SPARK = ['.#.', '###', '.#.'];
+const SPARK = [[0, -2], [0, -1], [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0], [0, 1], [0, 2]];
+const ZED = [[0, 0], [1, 0], [2, 0], [3, 0], [2, 1], [1, 2], [0, 3], [1, 3], [2, 3], [3, 3]];
+const stamp = (c, pts, at, v) => { const [x, y] = k(at).map(Math.round); pts.forEach(([dx, dy]) => c.set(x + dx, y + dy, v)); };
 
-function ground(c, from = 2, to = 21) {
-  for (let x = from; x <= to; x += 2) c.set(x, 22, 3);
-}
+// ---------- 小人 ----------
 
-// 站姿。arms: 'down' | 'wave' | 'v' | 'flex' | 'flexHigh'；dy 整体上移；tuck 收腿（跳起）
-function standing(c, b, { face, arms, dy = 0, tuck = false, band }) {
-  const cx = 12;
-  const y = (n) => n - dy;
-  head(c, cx - 4, y(2), face, band);
-  c.rect(cx - 1, y(9), 2, 1);
-  c.rect(cx - b.sw, y(10), b.sw * 2, 1 + (b.t > 1 ? 1 : 0));
-  c.rect(cx - b.tw, y(11), b.tw * 2, 5);
-  // 两腿之间留两格空隙
-  const legEnd = tuck ? 18 : 20;
-  const lx = cx - 1 - b.t;
-  const rx = cx + 1;
-  c.rect(lx, y(16), b.t, legEnd - 16 + 1);
-  c.rect(rx, y(16), b.t, legEnd - 16 + 1);
-  c.rect(lx - 1, y(legEnd + 1), b.t + 1, 1);
-  c.rect(rx, y(legEnd + 1), b.t + 1, 1);
+// p：姿势（各关节坐标）；face：open | smile | blink | joy | grit | sleep
+function person(c, b, p, face, stage) {
+  const axis = [p.pelvis[0] - p.neck[0], p.pelvis[1] - p.neck[1]];
+  const len = Math.hypot(...axis) || 1;
+  const u = [axis[0] / len, axis[1] / len];
+  const n = [-u[1], u[0]];
+  const sh = add(p.neck, [u[0] * 1.5, u[1] * 1.5]);
+  const shL = add(sh, [n[0] * b.sw, n[1] * b.sw]);
+  const shR = add(sh, [-n[0] * b.sw, -n[1] * b.sw]);
+  const hipL = add(p.pelvis, [n[0] * 1.6, n[1] * 1.6]);
+  const hipR = add(p.pelvis, [-n[0] * 1.6, -n[1] * 1.6]);
 
-  const L = cx - b.sw - b.t;
-  const R = cx + b.sw;
-  const armDown = (x) => c.rect(x, y(10), b.t, 6);
-  if (arms === 'down') { armDown(L); armDown(R); }
-  if (arms === 'wave') { armDown(L); c.rect(R, y(4), b.t, 7); c.rect(R + b.t, y(3), 1, 2); }
-  if (arms === 'v') {
-    for (let k = 0; k < 6; k++) {
-      c.rect(L - Math.floor(k / 2), y(10 - k), b.t, 1);
-      c.rect(R + Math.floor(k / 2), y(10 - k), b.t, 1);
+  // 脚下一块网点影子
+  if (p.shadow !== false) {
+    const sx = Math.round(p.shadow?.[0] ?? p.pelvis[0] * K);
+    const w = Math.round(p.shadow?.[1] ?? 7 * K);
+    const gy = Math.round((GROUND + 0.6) * K);
+    for (let x = sx - w; x <= sx + w; x++) {
+      c.set(x, gy, INK);
+      if (Math.abs(x - sx) < w - 2 && x % 2 === 0) c.set(x, gy - 1, INK);
     }
   }
-  if (arms === 'flex' || arms === 'flexHigh') {
-    const up = arms === 'flexHigh' ? 4 : 3;
-    c.rect(L - 2, y(10), b.t + 2, b.t);
-    c.rect(R, y(10), b.t + 2, b.t);
-    c.rect(L - 2, y(10 - up), b.t, up);
-    c.rect(R + 2, y(10 - up), b.t, up);
-    c.rect(L - 3, y(10 - up - 1), b.t + 2, 2);
-    c.rect(R + 1, y(10 - up - 1), b.t + 2, 2);
-  }
-}
 
-// 坐姿。pose: 'hug' 抱膝打瞌睡（nod 低头一格）| 'stretch' 伸直腿、双臂上举（lean 左右晃）
-function sitting(c, b, { face, pose, nod = 0, lean = 0, band }) {
-  const cx = 8;
-  head(c, cx - 4 + nod + lean, 8 + nod, face, band);
-  c.rect(cx - 1, 15, 2, 1);
-  c.rect(cx - b.sw, 16, b.sw * 2, 1);
-  c.rect(cx - b.tw, 17, b.tw * 2, 4);
-  const hip = cx + b.tw;
-  if (pose === 'hug') {
-    for (let k = 0; k < 5; k++) c.rect(hip + k, 20 - k, b.t, b.t);
-    c.rect(hip + 4, 16, b.t, 5);
-    c.rect(hip + 4, 21, 3, 1);
-    c.rect(cx + b.sw, 17, hip + 4 - (cx + b.sw), b.t);
-  } else {
-    c.rect(hip, 21 - b.t, 10, b.t);
-    c.rect(hip + 9, 21 - b.t - 2, 1, 2);
-    const L = cx - b.sw - b.t;
-    const R = cx + b.sw;
-    for (let k = 0; k < 6; k++) {
-      c.rect(L - Math.floor(k / 3) + lean, 16 - k, b.t, 1);
-      c.rect(R + Math.floor(k / 3) + lean, 16 - k, b.t, 1);
+  const leg = (hip, [knee, foot, toe]) => union(capsule(hip, knee, b.leg), capsule(knee, foot, b.leg), capsule(foot, toe, b.leg * 0.8));
+  const arm = (s, [elbow, hand]) => union(capsule(s, elbow, b.arm), capsule(elbow, hand, b.arm), circle(hand, b.arm + 0.5));
+
+  c.part(leg(hipL, p.legL), PLAIN, false);
+  c.part(leg(hipR, p.legR), PLAIN, false);
+  const torso = capsule(sh, add(p.pelvis, [-u[0] * 1.5, -u[1] * 1.5]), b.tw);
+  c.part(p.lying ? torso : union(torso, capsule(shL, shR, b.arm + 0.6)), PLAIN, false);
+  c.part(capsule(hipL, hipR, Math.min(b.tw - 0.6, 2.4)), SOLID, false);
+  if (p.armsBehind && !p.noArms) {
+    c.part(arm(shL, p.armL), PLAIN, false);
+    c.part(arm(shR, p.armR), PLAIN, false);
+  }
+
+  // 头：大圆脸，上半部是头发，左上一道高光
+  const r = 5.6;
+  const head = circle(p.head, r);
+  c.part(head, PLAIN, false);
+  const [hx, hy] = k(p.head);
+  const hair = (x, y) => head(x, y) && y + 0.5 < hy - 1 + (Math.abs(x + 0.5 - hx) > 5.5 ? 3 : 0);
+  c.part(hair, SOLID, false);
+  const X = Math.round(hx);
+  const Y = Math.round(hy);
+  [[-4, -6], [-3, -6], [-5, -5]].forEach(([dx, dy]) => c.set(X + dx, Y + dy, PAPER));
+  if (stage >= 5) for (let x = X - 9; x <= X + 9; x++) if (head(x, Y - 2)) c.set(x, Y - 2, ACC);
+
+  const px = (pts, v = INK) => pts.forEach(([dx, dy]) => c.set(X + dx, Y + dy, v));
+  if (face === 'open' || face === 'smile') px([[-3, 1], [-3, 2], [-3, 3], [2, 1], [2, 2], [2, 3]]);
+  if (face === 'blink' || face === 'sleep') px([[-4, 3], [-3, 3], [-2, 3], [1, 3], [2, 3], [3, 3]]);
+  if (face === 'joy') px([[-4, 3], [-3, 2], [-2, 3], [1, 3], [2, 2], [3, 3]]);
+  if (face === 'grit') px([[-4, 1], [-3, 2], [-2, 3], [3, 1], [2, 2], [1, 3], [-2, 6], [-1, 6], [0, 6], [1, 6]]);
+  if (face === 'smile' || face === 'joy') px([[-2, 5], [1, 5], [-1, 6], [0, 6]]);
+  if (face === 'joy') px([[-6, 5], [-5, 5], [4, 5], [5, 5]], ACC);
+  if (face === 'sleep') px([[-1, 6], [0, 6]]);
+
+  if (!p.armsBehind && !p.noArms) {
+    c.part(arm(shL, p.armL), PLAIN, false);
+    c.part(arm(shR, p.armR), PLAIN, false);
+  }
+  if (stage >= 5) {
+    for (const hand of [p.armL[1], p.armR[1]]) {
+      const [x, y] = k(hand).map(Math.round);
+      c.set(x - 1, y + 2, ACC); c.set(x, y + 2, ACC); c.set(x + 1, y + 2, ACC);
     }
   }
 }
 
-// 趴下睡着：横躺。breathe 胸口起伏一格
-function lying(c, b, { breathe = 0, band }) {
-  head(c, 1, 15, 'closed', band);
-  const h = b.tw * 2;
-  c.rect(9, 22 - h - breathe, 8, h + breathe);
-  c.rect(17, 22 - b.t, 5, b.t);
-  c.rect(21, 22 - b.t - 2, 1, 2);
+// ---------- 姿势 ----------
+
+const CX = 11.5; // 平时站在单杠左边
+const BX = (BAR_L + BAR_R) / 2; // 引体向上时站到杠下
+
+function standPose(b, { dy = 0, arms = 'down', tuck = false }) {
+  const y = (v) => v - dy;
+  const p = {
+    head: [CX, y(9)],
+    neck: [CX, y(14.6)],
+    pelvis: [CX, y(23)],
+    legL: tuck ? [[CX - 3, y(26)], [CX - 2.5, y(29)], [CX - 4, y(29)]] : [[CX - 2, y(28)], [CX - 2, y(32.5)], [CX - 3.5, y(32.5)]],
+    legR: tuck ? [[CX + 3, y(26)], [CX + 2.5, y(29)], [CX + 4, y(29)]] : [[CX + 2, y(28)], [CX + 2, y(32.5)], [CX + 3.5, y(32.5)]],
+  };
+  const s = b.sw;
+  if (arms === 'down') { p.armL = [[CX - s - 1, y(20)], [CX - s - 1.5, y(24)]]; p.armR = [[CX + s + 1, y(20)], [CX + s + 1.5, y(24)]]; }
+  if (arms === 'wave') { p.armL = [[CX - s - 1, y(20)], [CX - s - 1.5, y(24)]]; p.armR = [[CX + s + 3, y(15)], [CX + s + 4, y(9)]]; }
+  if (arms === 'v') { p.armL = [[CX - s - 3, y(14)], [CX - s - 5, y(9)]]; p.armR = [[CX + s + 3, y(14)], [CX + s + 5, y(9)]]; }
+  return p;
+}
+
+function pullPose(b, up) {
+  const hands = [[BX - 6.8, BAR_Y], [BX + 6.8, BAR_Y]];
+  if (up) {
+    return {
+      head: [BX, 6], neck: [BX, 11.6], pelvis: [BX, 19.5], armsBehind: true,
+      armL: [[BX - b.sw - 3, 15], hands[0]], armR: [[BX + b.sw + 3, 15], hands[1]],
+      legL: [[BX - 3, 24], [BX - 2.5, 28], [BX - 4, 28]], legR: [[BX + 3, 24], [BX + 2.5, 28], [BX + 4, 28]],
+    };
+  }
+  return {
+    head: [BX, 17], neck: [BX, 22.6], pelvis: [BX, 29], armsBehind: true,
+    armL: [[BX - 7.6, 19], hands[0]], armR: [[BX + 7.6, 19], hands[1]],
+    legL: [[BX - 5, 30.5], [BX - 3.5, 32.5], [BX - 5, 32.5]], legR: [[BX + 5, 30.5], [BX + 3.5, 32.5], [BX + 5, 32.5]],
+  };
+}
+
+// 伸腿坐着，双手放在腿上，歪头打瞌睡
+function dozePose(b, nod) {
+  return {
+    head: [CX - 1 + nod * 0.8, 17 + nod * 1.2], neck: [CX - 1, 22.4], pelvis: [CX - 1, 30.2],
+    armL: [[CX - b.sw - 1.5, 27.5], [CX + 1, 30.5]], armR: [[CX + b.sw + 1, 27.5], [CX + 4, 30.5]],
+    legL: [[CX + 4, 31.4], [CX + 9, 31.6], [CX + 9.5, 29.8]], legR: [[CX + 4, 32.2], [CX + 9.5, 32.4], [CX + 10, 30.6]],
+    shadow: [(CX + 3) * K, 9 * K],
+  };
+}
+
+function lyingPose(breathe) {
+  return {
+    lying: true, noArms: true,
+    head: [11, 27.8], neck: [16.4, 29.6 - breathe], pelvis: [25, 30 - breathe],
+    armL: [[20, 30], [24, 30]], armR: [[20, 30], [24, 30]], shadow: [19 * K, 14 * K],
+    legL: [[30.5, 31], [36, 31.4], [36.5, 29.6]], legR: [[30.5, 31], [36, 31.4], [36.5, 29.6]],
+  };
+}
+
+function stretchPose(b, lean) {
+  return {
+    head: [CX + lean, 15.5], neck: [CX + lean * 0.5, 21], pelvis: [CX, 29],
+    armL: [[CX - b.sw - 3 + lean, 19 - lean], [CX - b.sw - 6 + lean, 14 - lean * 2]], armR: [[CX + b.sw + 3 + lean, 19 + lean], [CX + b.sw + 6 + lean, 14 + lean * 2]],
+    legL: [[CX - 6, 30.5], [CX - 1, 32.5], [CX + 0.5, 32.5]], legR: [[CX + 6, 30.5], [CX + 1, 32.5], [CX - 0.5, 32.5]],
+  };
 }
 
 function frame(stage, mood, n) {
   const b = BUILDS[stage];
-  const band = stage >= 5;
   const c = canvas();
+  scenery(c);
   if (mood === 'waiting') {
-    ground(c);
-    standing(c, b, { face: n ? 'smile' : 'open', arms: n ? 'wave' : 'down', band });
+    person(c, b, standPose(b, { arms: n ? 'wave' : 'down' }), n ? 'smile' : 'open', stage);
   } else if (mood === 'working') {
-    ground(c);
-    standing(c, b, { face: 'smile', arms: n ? 'flexHigh' : 'flex', dy: n ? 1 : 0, band });
+    person(c, b, pullPose(b, !!n), 'grit', stage);
   } else if (mood === 'happy') {
-    ground(c, n ? 6 : 2, n ? 17 : 21);
-    standing(c, b, { face: 'joy', arms: 'v', dy: n ? 2 : 0, tuck: !!n, band });
-    if (n) { c.draw(SPARK, 1, 3, 2); c.draw(SPARK, 20, 7, 2); }
-    else { c.draw(SPARK, 2, 9, 2); c.draw(SPARK, 19, 2, 2); }
+    person(c, b, standPose(b, { arms: 'v', dy: n ? 3 : 0, tuck: !!n }), 'joy', stage);
+    stamp(c, SPARK, n ? [3, 10] : [4, 4], ACC);
+    stamp(c, SPARK, n ? [23, 3] : [22, 9], ACC);
   } else if (mood === 'sleepy') {
-    ground(c);
-    sitting(c, b, { face: 'closed', pose: 'hug', nod: n, band });
-    c.draw(Z, 16, n ? 3 : 6, 4);
+    person(c, b, dozePose(b, n), 'sleep', stage);
+    stamp(c, ZED, n ? [19, 6] : [17, 10], GRAY);
   } else if (mood === 'down') {
-    ground(c, 2, 21);
-    lying(c, b, { breathe: n, band });
-    c.draw(Z, 6, n ? 6 : 9, 4);
-    if (n) c.draw(Z, 11, 3, 4);
+    person(c, b, lyingPose(n), 'sleep', stage);
+    stamp(c, ZED, n ? [11, 15] : [9, 19], GRAY);
+    if (n) stamp(c, ZED, [16, 11], GRAY);
   } else {
-    ground(c);
-    sitting(c, b, { face: 'joy', pose: 'stretch', lean: n ? 1 : 0, band });
+    person(c, b, stretchPose(b, n ? 1 : 0), 'blink', stage);
   }
   return c.g;
 }
 
-const CLASSES = ['', 'p', 'a', 'g', 'm'];
+// ---------- 输出 ----------
 
-// 把同色的横向连续像素合并成一个 rect，减少节点
+const CLASSES = ['', 'p', 'a', 'g', 'm', 'b'];
+
+// 同色横向连续像素合并成一个 rect
 function toRects(g) {
   let out = '';
   g.forEach((row, y) => {
@@ -170,7 +259,7 @@ function toRects(g) {
 
 // mood: waiting | working | happy | sleepy | down | rest
 export function buddySVG(stage, mood) {
-  return `<svg class="buddy-svg mood-${mood}" viewBox="0 0 ${W} ${W}" shape-rendering="crispEdges" aria-hidden="true">
+  return `<svg class="buddy-svg mood-${mood}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges" aria-hidden="true">
     <g class="f1">${toRects(frame(stage, mood, 0))}</g>
     <g class="f2">${toRects(frame(stage, mood, 1))}</g>
   </svg>`;

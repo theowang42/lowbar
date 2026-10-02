@@ -231,19 +231,20 @@ button { font: inherit; color: inherit; }
 
 .label { font-size: 12px; font-weight: 400; letter-spacing: 0.24em; color: var(--muted); }
 
-/* 像素小人：24×24，每格 7px；两帧逐帧切换 */
+/* 像素小人：66×54 的 1-bit 像素画，每格 4px；两帧逐帧切换 */
 .buddy { display: grid; justify-items: start; }
-.buddy-art { width: 168px; height: 168px; margin-left: -14px; }
+.buddy-art { width: 264px; max-width: 100%; aspect-ratio: 66 / 54; }
 .buddy-svg { display: block; width: 100%; height: 100%; color: var(--fg); }
 .buddy-svg .p { fill: currentColor; }
 .buddy-svg .a { fill: var(--accent); }
 .buddy-svg .g { fill: var(--faint); }
 .buddy-svg .m { fill: var(--muted); }
+.buddy-svg .b { fill: var(--bg); }
 .buddy-svg .f2 { opacity: 0; }
 .buddy-svg .f1 { animation: frame-a var(--tick, 1.2s) steps(1, end) infinite; }
 .buddy-svg .f2 { animation: frame-b var(--tick, 1.2s) steps(1, end) infinite; }
-.mood-working { --tick: 0.7s; }
-.mood-happy { --tick: 0.5s; }
+.mood-happy { --tick: 0.6s; }
+.mood-working { --tick: 0.9s; }
 .mood-sleepy, .mood-down { --tick: 2s; }
 .mood-rest { --tick: 1.6s; }
 @keyframes frame-a { 0% { opacity: 1; } 50% { opacity: 0; } }

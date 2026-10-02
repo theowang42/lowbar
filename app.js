@@ -89,7 +89,7 @@ function renderHome() {
 
 const SAY = {
   waiting: '在等你。今天练一会儿？',
-  working: '加油，它在给你打气。',
+  working: '它在陪你一起拉。',
   happy: '今天练完了，它很开心。',
   sleepy: '漏了一天，它有点犯困。',
   down: '好几天没练，它趴下了。今天练一组就能叫醒它。',
