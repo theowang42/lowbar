@@ -1,7 +1,7 @@
 // 只负责界面和事件。业务逻辑在 core.js，数据读写在 storage.js。
 import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
-  toISODate, todayPlan, calcStreak, weekDone, latestWeight, buddy,
+  toISODate, todayPlan, calcStreak, weekDone, latestWeight, buddy, weekday,
   completeDay, initialProfile, clampTarget, weekView, currentExercise,
 } from './core.js';
 import * as storage from './storage.js';
@@ -19,7 +19,7 @@ function show(view) {
   for (const v of ['home', 'onboarding', 'settings']) $(v).hidden = v !== view;
   $('settings-btn').hidden = view !== 'home';
   $('back-btn').hidden = view !== 'settings';
-  $('date').textContent = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+  $('date').innerHTML = `<span class="prompt">~/lowbar $</span> ${state.today} 周${'日一二三四五六'[weekday(state.today)]}`;
   if (view === 'home') renderHome();
   if (view === 'onboarding') renderOnboarding();
   if (view === 'settings') renderSettings();
@@ -28,6 +28,47 @@ function show(view) {
 // ---------- 首页 ----------
 
 const totalSets = () => Object.values(state.sets).reduce((a, n) => a + n, 0);
+
+// 终端式逐字打出。lines：[[标签, 正文, 额外 class]]；光标停在正在打的那一行末尾
+function typeLines(el, lines, speed = 32) {
+  const token = {};
+  el._typing = token;
+  el.innerHTML = lines.map(([tag, , cls]) =>
+    `<span class="log${cls ? ` ${cls}` : ''}">${tag ? `<b>${esc(tag)}</b> ` : ''}<span></span></span>`).join('');
+  const rows = [...el.querySelectorAll('.log')];
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    rows.forEach((r, i) => { r.lastChild.textContent = lines[i][1]; });
+    rows.at(-1)?.classList.add('typing');
+    return;
+  }
+  let li = 0;
+  let ci = 0;
+  const tick = () => {
+    if (el._typing !== token || li >= rows.length) return;
+    rows.forEach((r, i) => r.classList.toggle('typing', i === li));
+    const text = [...lines[li][1]];
+    rows[li].lastChild.textContent = text.slice(0, ++ci).join('');
+    if (ci >= text.length) {
+      if (li === rows.length - 1) return;
+      li++;
+      ci = 0;
+      setTimeout(tick, speed * 6);
+    } else {
+      setTimeout(tick, speed);
+    }
+  };
+  tick();
+}
+
+// 只在内容变化时重打，避免每点一组都重来
+function typeOnce(el, lines) {
+  const key = JSON.stringify(lines);
+  if (el.dataset.typed === key) return;
+  el.dataset.typed = key;
+  typeLines(el, lines);
+}
+
+const bar = (done, total) => `[${'█'.repeat(done)}${'░'.repeat(Math.max(0, total - done))}]`;
 
 const pad = (i) => String(i + 1).padStart(2, '0');
 
@@ -42,7 +83,7 @@ function renderHome() {
 
   if (plan.type === 'rest') {
     $('title').textContent = '休息日';
-    $('focus').textContent = '今天不练。拉伸一下，明天继续。休息不会打断连续。';
+    $('focus').textContent = '# 今天不练。拉伸一下，休息不会打断连续。';
     $('list').innerHTML = STRETCHES.map((s, i) => {
       const [name, how] = s.split('：');
       return `<li><div class="row-item static"><span class="idx">${pad(i)}</span>
@@ -54,7 +95,7 @@ function renderHome() {
     const done = plan.items.filter((i) => !i.optional).reduce((a, i) => a + Math.min(SETS, state.sets[i.id] || 0), 0);
     const current = entry ? null : currentExercise(plan.items, state.sets);
     $('title').textContent = entry ? '今天练完了' : '今天练';
-    $('focus').innerHTML = entry ? '' : `<b>${done}</b> / ${required} 组`;
+    $('focus').innerHTML = entry ? '' : `<span class="bar">${bar(done, required)}</span> <b>${done}</b>/${required} 组`;
     $('list').innerHTML = plan.items.map((item, i) => {
       const n = entry ? (entry.exercises?.[item.id] ? SETS : 0) : state.sets[item.id] || 0;
       const active = item.id === current;
@@ -67,21 +108,20 @@ function renderHome() {
         <span class="main">
           <span class="name">${esc(item.name)}${item.optional ? '<span class="tag">可选</span>' : ''}</span>
           ${active ? `<span class="cue">${esc(item.cue)}</span>` : ''}
-          <span class="sets">${dots(n)}<span>${n >= SETS ? '完成' : active ? `第 ${n + 1} 组 · 做完点这里` : `${n} / ${SETS} 组`}</span></span>
+          <span class="sets">${dots(n)}${n >= SETS ? '<span class="ok">[ OK ]</span>' : active ? `<span class="cur">&gt; 第 ${n + 1} 组，做完点这里</span>` : `<span>${n}/${SETS}</span>`}</span>
         </span>
         <span class="target"><b>${target}</b><small>${item.unit} × ${SETS}</small></span>
       </button></li>`;
     }).join('');
     if (entry) {
       $('action').innerHTML = `<div class="done">
-        <span class="mark" aria-hidden="true"></span>
-        <span>今天完成了</span>
-        <button id="undo-btn" class="text-btn" type="button">撤销</button>
+        <span><b class="ok">[ DONE ]</b> 今天完成了</span>
+        <button id="undo-btn" class="text-btn" type="button">[ 撤销 ]</button>
       </div>`;
     } else {
       const ready = totalSets() > 0;
-      $('action').innerHTML = `<button id="complete-btn" class="btn big" type="button"${ready ? '' : ' disabled'}>完成今天</button>
-        <p class="note">${ready ? '没做满的动作不影响打卡，只是目标不加。' : '至少做完一组才能打卡。'}</p>`;
+      $('action').innerHTML = `<button id="complete-btn" class="btn big" type="button"${ready ? '' : ' disabled'}>完成今天<span class="key">[空格]</span></button>
+        <p class="note">${ready ? '# 没做满的动作不影响打卡，只是目标不加' : '# 至少做完一组才能打卡'}</p>`;
     }
   }
   renderStats();
@@ -101,19 +141,19 @@ function renderStats() {
   const w = latestWeight(profile.weights);
   const b = buddy(history, today, totalSets());
   $('buddy-art').innerHTML = buddySVG(b.stage, b.mood);
-  $('buddy-name').textContent = b.name;
-  $('buddy-days').textContent = b.next ? `再练 ${b.toNext} 天 →「${b.next.name}」` : `已练 ${b.days} 天`;
-  $('buddy-say').textContent = b.days === 0 && b.mood === 'waiting' ? '你好。你练多久，我就跟着长多壮。' : SAY[b.mood];
+  $('buddy-name').innerHTML = `<b>LV.${b.stage + 1}</b> ${esc(b.name)}`;
+  $('buddy-days').textContent = b.next ? `▸ 再练 ${b.toNext} 天进化为「${b.next.name}」` : `▸ 已满级 · 共练 ${b.days} 天`;
+  typeOnce($('buddy-say'), [['>', b.days === 0 && b.mood === 'waiting' ? '你好。你练多久，我就跟着长多壮。' : SAY[b.mood]]]);
   $('streak').textContent = calcStreak(history, today);
   $('week').innerHTML = weekView(history, today).map((d) =>
     `<li class="day-${d.status}${d.isToday ? ' now' : ''}" title="${d.date}"><i></i><span>${d.label}</span></li>`).join('');
-  $('stat-week').textContent = `${weekDone(history, today)} / 6 天`;
+  $('stat-week').textContent = `${weekDone(history, today)}/6 天`;
   $('stat-weight').textContent = w ? `${w} kg` : '—';
 }
 
-function changeText(c) {
+function changeLine(c) {
   const ex = EXERCISES[c.id];
-  return `${ex.name}目标 ${c.from} → ${c.to} ${ex.unit}`;
+  return ['[ UP ]', `${ex.name}目标 ${c.from} → ${c.to} ${ex.unit}`];
 }
 
 async function complete() {
@@ -130,12 +170,13 @@ async function complete() {
   renderHome();
   const after = calcStreak(state.history, state.today);
   const grown = buddy(state.history, state.today);
-  const lines = [
-    `连续 ${after} 天${after > before ? '，+1' : ''}。`,
-    ...(grown.stage > grownFrom ? [`它长大了：「${grown.name}」。`] : []),
-    ...r.changes.map(changeText),
-  ];
-  $('feedback').innerHTML = lines.map(esc).join('<br>');
+  const done = Object.values(r.entry.exercises).filter(Boolean).length;
+  typeLines($('feedback'), [
+    ['[ OK ]', `今日训练已提交 · 完成 ${done} 个动作`, 'ok'],
+    [after > before ? '[ +1 ]' : '[ -- ]', `连续 ${after} 天`],
+    ...(grown.stage > grownFrom ? [['[ LV ]', `进化：LV.${grownFrom + 1} → LV.${grown.stage + 1}「${grown.name}」`, 'ok']] : []),
+    ...r.changes.map(changeLine),
+  ]);
 }
 
 async function undo() {
@@ -272,6 +313,8 @@ function onKey(e) {
   if (e.key === ' ') {
     e.preventDefault();
     complete();
+  } else if (e.key === 't' || e.key === 'T') {
+    toggleTheme();
   } else if (/^[1-9]$/.test(e.key)) {
     const card = $('list').querySelectorAll('button.row-item')[Number(e.key) - 1];
     if (card && !card.disabled) bump(card.dataset.id);

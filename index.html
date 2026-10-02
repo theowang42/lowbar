@@ -29,7 +29,7 @@
     <button id="settings-btn" class="icon-btn" type="button" aria-label="设置" hidden>
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2-1.2L14.5 3h-5l-.4 2.6a7.5 7.5 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.5 7.5 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
     </button>
-    <button id="back-btn" class="text-btn" type="button" hidden>返回</button>
+    <button id="back-btn" class="text-btn" type="button" hidden>[ 返回 ]</button>
     </div>
   </header>
 
@@ -47,17 +47,17 @@
         <p id="buddy-say" class="buddy-say"></p>
       </section>
       <section class="block">
-        <h2 class="label">连续</h2>
+        <h2 class="label"># 连续</h2>
         <div class="streak-row">
           <p class="streak"><b id="streak">0</b><span>天</span></p>
           <ol id="week" class="week" aria-label="本周"></ol>
         </div>
       </section>
       <dl class="stats">
-        <div><dt>本周</dt><dd id="stat-week"></dd></div>
-        <div><dt>体重</dt><dd id="stat-weight"></dd></div>
+        <div><dt># 本周</dt><dd id="stat-week"></dd></div>
+        <div><dt># 体重</dt><dd id="stat-weight"></dd></div>
       </dl>
-      <p class="hint"><kbd>1</kbd> – <kbd>4</kbd> 记一组　<kbd>空格</kbd> 完成今天</p>
+      <p class="hint">[1-4] 记一组　[空格] 完成今天　[T] 切换日夜</p>
     </aside>
   </main>
 
@@ -68,17 +68,17 @@
 
   <main id="settings" class="page" hidden>
     <form id="weight-form" class="form">
-      <h2>体重</h2>
+      <h2># 体重</h2>
       <label class="row"><span>今天的体重（kg）</span><input name="weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" required></label>
       <button class="btn" type="submit">记录</button>
     </form>
     <form id="exercise-form" class="form">
-      <h2>每组目标次数</h2>
+      <h2># 每组目标次数</h2>
       <div id="exercise-fields"></div>
       <button class="btn" type="submit">保存</button>
     </form>
     <div class="form">
-      <h2>数据</h2>
+      <h2># 数据</h2>
       <p class="muted">导入时：设置会被替换，训练记录只追加，已有的日期不会被覆盖。</p>
       <div class="buttons">
         <button id="export-btn" class="btn secondary" type="button">导出 JSON</button>

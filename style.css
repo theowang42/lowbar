@@ -14,6 +14,7 @@
   --accent: #ec5b13;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, "Noto Sans Mono CJK SC", "PingFang SC", "Microsoft YaHei", monospace;
   color-scheme: light;
 }
 
@@ -81,12 +82,33 @@ button { font: inherit; color: inherit; }
   margin-bottom: 28px;
 }
 
-.date { color: var(--muted); font-size: 13px; letter-spacing: 0.18em; }
+.date { color: var(--muted); font: 13px/1.5 var(--mono); letter-spacing: 0.02em; }
+.prompt { color: var(--faint); }
+/* 终端光标：方块，逐帧闪烁 */
+@keyframes blink { 50% { opacity: 0; } }
+.title::after {
+  content: "";
+  display: inline-block;
+  width: 0.42em;
+  height: 0.86em;
+  margin-left: 0.14em;
+  vertical-align: -0.06em;
+  background: currentColor;
+  animation: blink 1.1s steps(1, end) infinite;
+}
+.cur::after, .log.typing > span::after {
+  content: "▌";
+  margin-left: 2px;
+  animation: blink 1.1s steps(1, end) infinite;
+}
+@media (prefers-reduced-motion: reduce) { .title::after, .cur::after, .log.typing > span::after { animation: none; } }
+
 .title { margin-top: 6px; font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: 0.04em; }
 @media (min-width: 900px) { .title { font-size: 40px; } }
 
 .tools { display: flex; gap: 4px; margin: -6px -8px 0 0; }
 
+.text-btn { font-family: var(--mono); font-size: 13px; }
 .icon-btn, .text-btn {
   border: 0;
   background: none;
@@ -110,7 +132,8 @@ button { font: inherit; color: inherit; }
 }
 
 /* 今天的总进度 */
-.focus { margin-bottom: 10px; color: var(--muted); font-size: 13px; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+.focus { margin-bottom: 10px; color: var(--muted); font: 13px/1.6 var(--mono); }
+.focus .bar { color: var(--fg); letter-spacing: -0.02em; }
 .focus b { color: var(--fg); font-weight: 500; }
 .focus:empty { display: none; }
 
@@ -141,26 +164,27 @@ button { font: inherit; color: inherit; }
 .row-item.static { align-items: start; }
 .row-item.locked:not(.full) { opacity: 0.35; }
 
-.idx { font: 400 12px/1 var(--display); letter-spacing: 0.08em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.idx { font: 400 12px/1 var(--mono); letter-spacing: 0.08em; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .main { display: grid; gap: 4px; min-width: 0; }
 .name { font-size: 17px; font-weight: 500; line-height: 1.4; letter-spacing: 0.02em; color: var(--dim); }
-.tag { margin-left: 8px; font-size: 12px; font-weight: 400; letter-spacing: 0.1em; color: var(--muted); }
+.tag { margin-left: 8px; font: 400 12px var(--mono); color: var(--muted); }
+.tag::before { content: "--"; }
 .cue { color: var(--muted); font-size: 14px; line-height: 1.65; max-width: 34em; }
 
-.sets { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.sets { display: flex; align-items: center; gap: 6px; font: 12px/1.5 var(--mono); color: var(--muted); }
 .sets i { width: 6px; height: 6px; background: var(--faint); }
 .sets i.on { background: var(--fg); }
 .sets span { margin-left: 6px; font-variant-numeric: tabular-nums; }
 
 .target { display: grid; justify-items: end; }
 .target b { font: 200 34px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--dim); }
-.target small { margin-top: 4px; color: var(--muted); font-size: 11px; letter-spacing: 0.1em; white-space: nowrap; }
+.target small { margin-top: 4px; color: var(--muted); font: 11px var(--mono); white-space: nowrap; }
 
 /* 做满的动作：橙色，收起 */
 .full .name { color: var(--muted); }
 .full .sets i.on { background: var(--accent); }
-.full .sets span, .full .target b { color: var(--accent); }
+.full .target b, .ok { color: var(--accent); }
 
 /* 现在该做的动作：唯一的视觉重点 */
 .row-item.active {
@@ -210,26 +234,29 @@ button { font: inherit; color: inherit; }
 }
 .btn:hover:not(:disabled) { opacity: 0.86; }
 .btn:focus-visible { outline: 1px solid var(--fg); outline-offset: 3px; }
-.btn.big { width: 100%; padding: 17px; font-size: 16px; letter-spacing: 0.32em; }
+.btn.big { width: 100%; padding: 17px; font-size: 16px; letter-spacing: 0.32em; position: relative; }
+.btn .key { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); font: 12px var(--mono); letter-spacing: 0; opacity: 0.5; }
+@media (hover: none) { .btn .key { display: none; } }
 .btn.big:disabled { background: transparent; border-color: var(--line); color: var(--muted); cursor: not-allowed; }
 .btn.secondary { background: transparent; color: var(--fg); border-color: var(--line); }
 .btn.secondary:hover { border-color: var(--fg); opacity: 1; }
 
-.note { text-align: center; color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+.note { text-align: center; color: var(--muted); font: 12px var(--mono); }
 
-.done { display: flex; align-items: center; gap: 14px; font-size: 16px; letter-spacing: 0.12em; }
-.done .mark { width: 10px; height: 10px; background: var(--accent); }
-.done > span:nth-child(2) { flex: 1; }
-.done .text-btn { font-size: 14px; letter-spacing: 0.08em; }
+.done { display: flex; align-items: center; gap: 14px; font: 15px var(--mono); }
+.done > span { flex: 1; }
+.done .text-btn { font: 13px var(--mono); }
 
-.feedback { margin-top: 16px; color: var(--dim); font-size: 14px; line-height: 1.9; }
+.feedback { margin-top: 16px; display: grid; color: var(--dim); font: 13px/1.9 var(--mono); }
+.log b { font-weight: 400; color: var(--fg); white-space: pre; }
+.log.ok b { color: var(--accent); }
 .feedback:empty { display: none; }
 
 /* ---------- 右侧：养成小人、连续、统计 ---------- */
 
 .side { display: grid; gap: 32px; }
 
-.label { font-size: 12px; font-weight: 400; letter-spacing: 0.24em; color: var(--muted); }
+.label { font: 400 12px var(--mono); color: var(--muted); }
 
 /* 像素小人：66×54 的 1-bit 像素画，每格 4px；两帧逐帧切换 */
 .buddy { display: grid; justify-items: start; }
@@ -254,9 +281,11 @@ button { font: inherit; color: inherit; }
 }
 
 .buddy-name { margin-top: 10px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.buddy-name span { font-size: 20px; font-weight: 600; letter-spacing: 0.08em; }
-.buddy-name small { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; }
-.buddy-say { margin-top: 4px; color: var(--dim); font-size: 14px; line-height: 1.7; }
+.buddy-name span { font-size: 20px; font-weight: 600; letter-spacing: 0.06em; }
+.buddy-name span b { font: 500 13px var(--mono); color: var(--muted); margin-right: 4px; letter-spacing: 0; }
+.buddy-name small { color: var(--muted); font: 12px var(--mono); }
+.buddy-say { margin-top: 6px; min-height: 1.7em; color: var(--dim); font: 13px/1.7 var(--mono); }
+.buddy-say .log b { color: var(--muted); }
 
 .streak-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-top: 10px; }
 .streak { display: flex; align-items: baseline; gap: 6px; }
@@ -272,7 +301,7 @@ button { font: inherit; color: inherit; }
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
 }
-.week li { display: grid; justify-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.week li { display: grid; justify-items: center; gap: 8px; font: 11px var(--mono); color: var(--muted); }
 .week i { width: 6px; height: 6px; background: var(--faint); }
 .week .day-done i { background: var(--fg); }
 .week .day-future i, .week .day-missed i { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
@@ -284,20 +313,11 @@ button { font: inherit; color: inherit; }
 
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .stats div { display: grid; gap: 2px; }
-.stats dt { color: var(--muted); font-size: 12px; letter-spacing: 0.12em; }
+.stats dt { color: var(--muted); font: 12px var(--mono); }
 .stats dd { margin: 0; font: 300 20px/1.3 var(--display); font-variant-numeric: tabular-nums; }
 
-.hint { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; }
-.hint kbd {
-  display: inline-block;
-  min-width: 20px;
-  padding: 2px 5px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  font: 11px/1.4 var(--sans);
-  text-align: center;
-  color: var(--fg);
-}
+.hint { color: var(--muted); font: 12px var(--mono); }
+
 @media (hover: none) { .hint { display: none; } }
 
 /* ---------- 引导与设置 ---------- */
@@ -307,7 +327,7 @@ button { font: inherit; color: inherit; }
 .muted { color: var(--muted); font-size: 14px; }
 
 .form { display: grid; gap: 16px; }
-.form h2 { font-size: 12px; font-weight: 400; letter-spacing: 0.24em; color: var(--muted); }
+.form h2 { font: 400 12px var(--mono); color: var(--muted); }
 
 .row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .row > span { display: grid; gap: 4px; }
