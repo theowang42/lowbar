@@ -149,7 +149,7 @@ button { font: inherit; color: inherit; }
 .cue { color: var(--muted); font-size: 14px; line-height: 1.65; max-width: 34em; }
 
 .sets { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
-.sets i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.sets i { width: 6px; height: 6px; background: var(--faint); }
 .sets i.on { background: var(--fg); }
 .sets span { margin-left: 6px; font-variant-numeric: tabular-nums; }
 
@@ -218,47 +218,68 @@ button { font: inherit; color: inherit; }
 .note { text-align: center; color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
 
 .done { display: flex; align-items: center; gap: 14px; font-size: 16px; letter-spacing: 0.12em; }
-.done .mark { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.done .mark { width: 10px; height: 10px; background: var(--accent); }
 .done > span:nth-child(2) { flex: 1; }
 .done .text-btn { font-size: 14px; letter-spacing: 0.08em; }
 
 .feedback { margin-top: 16px; color: var(--dim); font-size: 14px; line-height: 1.9; }
 .feedback:empty { display: none; }
 
-/* ---------- 右侧：连续、爬升、统计 ---------- */
+/* ---------- 右侧：养成小人、连续、统计 ---------- */
 
-.side { display: grid; gap: 36px; }
+.side { display: grid; gap: 32px; }
 
 .label { font-size: 12px; font-weight: 400; letter-spacing: 0.24em; color: var(--muted); }
 
-.streak, .climb { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
-.streak b, .climb b { font-family: var(--display); font-variant-numeric: tabular-nums; }
-.streak b { font-size: 96px; line-height: 0.85; font-weight: 100; letter-spacing: -0.05em; }
-.climb b { font-size: 44px; line-height: 0.9; font-weight: 200; letter-spacing: -0.03em; }
-.streak span, .climb span { font-size: 13px; color: var(--muted); letter-spacing: 0.1em; }
+/* 像素小人：24×24，每格 7px；两帧逐帧切换 */
+.buddy { display: grid; justify-items: start; }
+.buddy-art { width: 168px; height: 168px; margin-left: -14px; }
+.buddy-svg { display: block; width: 100%; height: 100%; color: var(--fg); }
+.buddy-svg .p { fill: currentColor; }
+.buddy-svg .a { fill: var(--accent); }
+.buddy-svg .g { fill: var(--faint); }
+.buddy-svg .m { fill: var(--muted); }
+.buddy-svg .f2 { opacity: 0; }
+.buddy-svg .f1 { animation: frame-a var(--tick, 1.2s) steps(1, end) infinite; }
+.buddy-svg .f2 { animation: frame-b var(--tick, 1.2s) steps(1, end) infinite; }
+.mood-working { --tick: 0.7s; }
+.mood-happy { --tick: 0.5s; }
+.mood-sleepy, .mood-down { --tick: 2s; }
+.mood-rest { --tick: 1.6s; }
+@keyframes frame-a { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes frame-b { 0% { opacity: 0; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .buddy-svg .f1, .buddy-svg .f2 { animation: none; }
+}
+
+.buddy-name { margin-top: 10px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.buddy-name span { font-size: 20px; font-weight: 600; letter-spacing: 0.08em; }
+.buddy-name small { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; }
+.buddy-say { margin-top: 4px; color: var(--dim); font-size: 14px; line-height: 1.7; }
+
+.streak-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-top: 10px; }
+.streak { display: flex; align-items: baseline; gap: 6px; }
+.streak b { font: 100 72px/0.85 var(--display); letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+.streak span { font-size: 13px; color: var(--muted); letter-spacing: 0.1em; }
 
 .week {
+  flex: 1;
+  max-width: 168px;
   list-style: none;
   padding: 0;
-  margin-top: 20px;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
 }
 .week li { display: grid; justify-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
-.week i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.week i { width: 6px; height: 6px; background: var(--faint); }
 .week .day-done i { background: var(--fg); }
 .week .day-future i, .week .day-missed i { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
 .week .day-missed i { opacity: 0.6; }
-.week .day-rest i { width: 7px; height: 1px; margin: 3px 0; border-radius: 0; }
+.week .day-rest i { height: 2px; margin: 2px 0; }
 .week .now span { color: var(--fg); }
 .week .now.day-done i { background: var(--accent); }
 .week .now:not(.day-done) i { box-shadow: inset 0 0 0 1px var(--fg); }
-
-.track { position: relative; height: 1px; margin-top: 16px; background: var(--line); }
-.track i { position: absolute; left: 0; top: -0.5px; height: 2px; background: var(--fg); }
-.next { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.7; }
-.next b { color: var(--fg); font-weight: 500; }
 
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .stats div { display: grid; gap: 2px; }

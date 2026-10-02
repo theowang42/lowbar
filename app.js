@@ -1,10 +1,11 @@
 // 只负责界面和事件。业务逻辑在 core.js，数据读写在 storage.js。
 import { EXERCISES, SETS, STRETCHES } from './plan.js';
 import {
-  toISODate, todayPlan, calcStreak, countDone, latestWeight, totalClimb, journey,
+  toISODate, todayPlan, calcStreak, weekDone, latestWeight, buddy,
   completeDay, initialProfile, clampTarget, weekView, currentExercise,
 } from './core.js';
 import * as storage from './storage.js';
+import { buddySVG } from './buddy.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -29,7 +30,6 @@ function show(view) {
 const totalSets = () => Object.values(state.sets).reduce((a, n) => a + n, 0);
 
 const pad = (i) => String(i + 1).padStart(2, '0');
-const meters = (m) => Math.floor(m).toLocaleString('zh-CN');
 
 function dots(n) {
   return Array.from({ length: SETS }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
@@ -87,19 +87,27 @@ function renderHome() {
   renderStats();
 }
 
+const SAY = {
+  waiting: '在等你。今天练一会儿？',
+  working: '加油，它在给你打气。',
+  happy: '今天练完了，它很开心。',
+  sleepy: '漏了一天，它有点犯困。',
+  down: '好几天没练，它趴下了。今天练一组就能叫醒它。',
+  rest: '周日，它也在伸懒腰。',
+};
+
 function renderStats() {
   const { history, today, profile } = state;
   const w = latestWeight(profile.weights);
-  const j = journey(totalClimb(history));
+  const b = buddy(history, today, totalSets());
+  $('buddy-art').innerHTML = buddySVG(b.stage, b.mood);
+  $('buddy-name').textContent = b.name;
+  $('buddy-days').textContent = b.next ? `再练 ${b.toNext} 天 →「${b.next.name}」` : `已练 ${b.days} 天`;
+  $('buddy-say').textContent = b.days === 0 && b.mood === 'waiting' ? '你好。你练多久，我就跟着长多壮。' : SAY[b.mood];
   $('streak').textContent = calcStreak(history, today);
   $('week').innerHTML = weekView(history, today).map((d) =>
     `<li class="day-${d.status}${d.isToday ? ' now' : ''}" title="${d.date}"><i></i><span>${d.label}</span></li>`).join('');
-  $('climb').textContent = meters(j.meters);
-  $('climb-bar').style.width = `${(j.progress * 100).toFixed(1)}%`;
-  $('climb-next').innerHTML = j.next
-    ? `下一站 <b>${esc(j.next.name)}</b> ${j.next.height} 米 · 还差 ${Math.ceil(j.next.height - j.meters)} 米`
-    : `已越过 <b>${esc(j.passed.name)}</b>，你站在世界之巅`;
-  $('stat-total').textContent = `${countDone(history)} 天`;
+  $('stat-week').textContent = `${weekDone(history, today)} / 6 天`;
   $('stat-weight').textContent = w ? `${w} kg` : '—';
 }
 
@@ -113,6 +121,7 @@ async function complete() {
   const r = completeDay(state.profile, state.history, state.today, state.sets);
   if (!r) return;
   const before = calcStreak(state.history, state.today);
+  const grownFrom = buddy(state.history, state.today).stage;
   await storage.saveUndo(state.today, state.profile);
   if (!(await storage.appendHistory(state.today, r.entry))) return;
   await storage.saveProfile(r.profile);
@@ -120,9 +129,10 @@ async function complete() {
   state.history = { ...state.history, [state.today]: r.entry };
   renderHome();
   const after = calcStreak(state.history, state.today);
+  const grown = buddy(state.history, state.today);
   const lines = [
-    `连续 ${after} 天${after > before ? '，+1' : ''}。今天爬升 ${r.climb.toFixed(1)} 米。`,
-    ...r.reached.map((l) => `你爬过了${l.name}的高度（${l.height} 米）。`),
+    `连续 ${after} 天${after > before ? '，+1' : ''}。`,
+    ...(grown.stage > grownFrom ? [`它长大了：「${grown.name}」。`] : []),
     ...r.changes.map(changeText),
   ];
   $('feedback').innerHTML = lines.map(esc).join('<br>');

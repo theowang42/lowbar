@@ -11,7 +11,6 @@ export const PROGRESS_AFTER = 3;
 
 // 每个训练日都练这些，按顺序显示（数字键 1–4 对应）
 // unit：计量单位；min / max：目标次数的下限与上限；optional：可选动作，不做也不影响打卡
-// lift：做一次身体（或上半身）被抬起的大致高度（米），用于累计"爬升"
 export const EXERCISES = {
   pull: {
     id: 'pull',
@@ -19,7 +18,6 @@ export const EXERCISES = {
     unit: '次',
     min: 1,
     max: 20,
-    lift: 0.5,
     cue: '双手握杠，弯膝让脚离地，下巴过杠再慢慢放下；拉不动时脚可以点地借力。',
   },
   push: {
@@ -28,7 +26,6 @@ export const EXERCISES = {
     unit: '次',
     min: 5,
     max: 40,
-    lift: 0.3,
     cue: '身体成一条直线，收紧腹部，胸口接近地面再推起。',
   },
   crunch: {
@@ -37,7 +34,6 @@ export const EXERCISES = {
     unit: '次',
     min: 10,
     max: 40,
-    lift: 0.15,
     cue: '仰卧屈膝，下背贴地，用腹部把肩膀卷离地面，停 1 秒再放下。',
   },
   squat: {
@@ -47,7 +43,6 @@ export const EXERCISES = {
     min: 10,
     max: 40,
     optional: true,
-    lift: 0.4,
     cue: '双脚与肩同宽，臀部向后坐，蹲到大腿与地面平行。',
   },
 };
@@ -63,21 +58,12 @@ export const STRETCHES = [
   '婴儿式：跪坐向前趴，放松背部，30 秒',
 ];
 
-// 累计爬升的一路地标（米），从低到高
-export const LANDMARKS = [
-  { name: '一层楼', height: 3 },
-  { name: '天安门城楼', height: 35 },
-  { name: '黄鹤楼', height: 51 },
-  { name: '大雁塔', height: 65 },
-  { name: '自由女神像', height: 93 },
-  { name: '胡夫金字塔', height: 139 },
-  { name: '埃菲尔铁塔', height: 330 },
-  { name: '东方明珠', height: 468 },
-  { name: '上海中心大厦', height: 632 },
-  { name: '哈利法塔', height: 828 },
-  { name: '泰山之巅', height: 1545 },
-  { name: '黄山光明顶', height: 1860 },
-  { name: '富士山', height: 3776 },
-  { name: '乞力马扎罗', height: 5895 },
-  { name: '珠穆朗玛峰', height: 8849 },
+// 养成小人的成长阶段：按累计训练天数，只升不降
+export const BUDDY_STAGES = [
+  { at: 0, name: '小不点' },
+  { at: 3, name: '起步了' },
+  { at: 10, name: '结实' },
+  { at: 30, name: '强壮' },
+  { at: 60, name: '肌肉块' },
+  { at: 100, name: '传奇' },
 ];

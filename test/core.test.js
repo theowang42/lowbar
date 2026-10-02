@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toISODate, addDays, weekday, dayType, todayPlan, calcStreak, weekDone, weekView, countDone, latestWeight,
-  clampTarget, progress, completeDay, currentExercise, climbOf, totalClimb, journey, startTarget, initialProfile, normalizeProfile, mergeHistory,
+  clampTarget, progress, completeDay, currentExercise, buddy, startTarget, initialProfile, normalizeProfile, mergeHistory,
 } from '../core.js';
-import { EXERCISES, TIMEZONE, LANDMARKS } from '../plan.js';
+import { EXERCISES, TIMEZONE } from '../plan.js';
 
 const done = () => ({ type: 'train', done: true, exercises: {} });
 const historyOf = (...dates) => Object.fromEntries(dates.map((d) => [d, done()]));
@@ -207,36 +207,40 @@ test('weekView 给出本周每天的状态', () => {
   assert.deepEqual(weekView({}, '2026-02-01').map((d) => d.date.slice(5)), ['01-26', '01-27', '01-28', '01-29', '01-30', '01-31', '02-01']);
 });
 
-test('爬升：每天的米数 = 次数 × 每次抬起的高度', () => {
-  const e = { reps: { pull: 10, push: 10, crunch: 20, squat: 10 } };
-  assert.equal(climbOf(e), 10 * 0.5 + 10 * 0.3 + 20 * 0.15 + 10 * 0.4);
-  assert.equal(climbOf({ type: 'train', done: true, exercises: { push: true } }), 0); // 旧记录没有 reps
-  assert.equal(climbOf(undefined), 0);
-  assert.equal(totalClimb({ a: e, b: e }), 2 * climbOf(e));
-});
-
-test('爬升：地标位置与进度', () => {
-  assert.deepEqual(journey(0), { meters: 0, passed: null, next: LANDMARKS[0], progress: 0 });
-  const j = journey(43);
-  assert.equal(j.passed.name, '天安门城楼');
-  assert.equal(j.next.name, '黄鹤楼');
-  assert.equal(j.progress, 0.5);
-  assert.equal(journey(35).passed.name, '天安门城楼'); // 正好到达也算越过
-  const top = journey(10000);
-  assert.equal(top.passed.name, '珠穆朗玛峰');
+test('养成小人：按累计训练天数长大，只升不降', () => {
+  const zero = buddy({}, '2026-10-01');
+  assert.deepEqual([zero.stage, zero.name, zero.toNext], [0, '小不点', 3]);
+  const h = historyOf('2026-09-28', '2026-09-29', '2026-09-30');
+  const b = buddy(h, '2026-10-01');
+  assert.equal(b.days, 3);
+  assert.equal(b.name, '起步了');
+  assert.equal(b.next.name, '结实');
+  assert.equal(b.toNext, 7);
+  const many = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [addDays('2026-01-01', i), done()]));
+  const top = buddy(many, '2026-06-01');
+  assert.equal(top.name, '传奇');
   assert.equal(top.next, null);
-  assert.equal(top.progress, 1);
+  assert.equal(top.stage, 5); // 很久没练也不会退回去
 });
 
-test('completeDay 算出今天的爬升和越过的地标', () => {
-  const p = initialProfile({}, '2026-09-28'); // pull 1, push 5, crunch 10, squat 10
-  const history = { '2026-09-26': { type: 'train', done: true, exercises: {}, reps: { pull: 60 } } }; // 30 m
-  const r = completeDay(p, history, '2026-09-28', { pull: 3, push: 3, crunch: 3 });
-  // 3 × 0.5 + 15 × 0.3 + 30 × 0.15 = 10.5
-  assert.equal(r.climb, 10.5);
-  assert.deepEqual(r.reached.map((l) => l.name), ['天安门城楼']);
-  const r2 = completeDay(p, {}, '2026-09-28', { push: 3 });
-  assert.deepEqual(r2.reached.map((l) => l.name), ['一层楼']);
+test('养成小人：心情跟着今天的状态走', () => {
+  const h = historyOf('2026-09-29', '2026-09-30'); // 周二、周三
+  assert.equal(buddy({}, '2026-10-01').mood, 'waiting'); // 新用户
+  assert.equal(buddy(h, '2026-10-01').mood, 'waiting'); // 昨天练了，今天还没练
+  assert.equal(buddy(h, '2026-10-01', 2).mood, 'working');
+  assert.equal(buddy({ ...h, '2026-10-01': done() }, '2026-10-01').mood, 'happy');
+  assert.equal(buddy(h, '2026-10-02').missed, 1);
+  assert.equal(buddy(h, '2026-10-02').mood, 'sleepy');
+});
+
+test('养成小人：漏 3 个训练日趴下，周日不算漏，练一组就醒', () => {
+  const h = historyOf('2026-10-03'); // 周六
+  assert.equal(buddy(h, '2026-10-04').mood, 'rest'); // 周日
+  assert.equal(buddy(h, '2026-10-05').missed, 0); // 周日不算漏
+  assert.equal(buddy(h, '2026-10-05').mood, 'waiting');
+  assert.equal(buddy(h, '2026-10-08').missed, 3); // 周四：漏了周一到周三
+  assert.equal(buddy(h, '2026-10-08').mood, 'down');
+  assert.equal(buddy(h, '2026-10-08', 1).mood, 'working');
 });
 
 test('currentExercise：先做必做动作，最后才是可选动作', () => {

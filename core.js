@@ -1,5 +1,5 @@
 // 纯函数：今日计划、连续天数、进阶判断。不访问 DOM，不访问存储。
-import { EXERCISES, WEEK, PROGRESS_AFTER, SETS, LANDMARKS } from './plan.js';
+import { EXERCISES, WEEK, PROGRESS_AFTER, SETS, BUDDY_STAGES } from './plan.js';
 
 const IDS = Object.keys(EXERCISES);
 
@@ -128,8 +128,7 @@ export function progress(id, state, done) {
 }
 
 // 完成今天。sets = { 动作 id: 做了几组 }，做满 SETS 组算该动作完成。
-// 返回 { entry, profile, changes, climb, reached }；今天已有记录或是休息日时返回 null（history 只追加不覆盖）。
-// climb：今天爬升的米数；reached：今天越过的地标。
+// 返回 { entry, profile, changes }；今天已有记录或是休息日时返回 null（history 只追加不覆盖）。
 export function completeDay(profile, history, iso, sets) {
   const type = dayType(iso);
   if (type === 'rest' || history[iso]) return null;
@@ -146,39 +145,40 @@ export function completeDay(profile, history, iso, sets) {
     states[id] = r.state;
     if (r.change) changes.push(r.change);
   }
-  const entry = { type, done: true, exercises, reps };
-  const before = totalClimb(history);
-  const climb = climbOf(entry);
   return {
-    entry,
+    entry: { type, done: true, exercises, reps },
     profile: { ...profile, exercises: states },
     changes,
-    climb,
-    reached: LANDMARKS.filter((l) => before < l.height && before + climb >= l.height),
   };
 }
 
-// ---------- 累计爬升 ----------
+// ---------- 养成小人 ----------
 
-// 一天爬升的米数 = 每个动作的次数 × 每次抬起的高度
-export function climbOf(entry) {
-  return Object.entries(entry?.reps || {}).reduce((m, [id, n]) => m + (EXERCISES[id]?.lift || 0) * n, 0);
-}
+// 小人的阶段和心情。setsToday：今天已经点了几组。
+// 心情：happy 今天练完 / working 正在练 / down 漏了 3 个以上训练日 / rest 周日 / sleepy 漏了 1–2 天 / waiting 在等你
+export function buddy(history, today, setsToday = 0) {
+  const days = countDone(history);
+  let stage = 0;
+  BUDDY_STAGES.forEach((s, i) => { if (days >= s.at) stage = i; });
+  const next = BUDDY_STAGES[stage + 1] || null;
 
-export function totalClimb(history) {
-  return Object.values(history).reduce((m, e) => m + climbOf(e), 0);
-}
-
-// 当前高度在地标路线上的位置。progress：从上一个地标到下一个地标走了多少（0–1）
-export function journey(meters) {
-  let passed = null;
-  let next = null;
-  for (const l of LANDMARKS) {
-    if (meters >= l.height) passed = l;
-    else { next = l; break; }
+  const doneDates = Object.keys(history).filter((d) => history[d]?.done && d < today).sort();
+  let missed = 0;
+  if (doneDates.length) {
+    for (let d = addDays(doneDates[doneDates.length - 1], 1); d < today; d = addDays(d, 1)) {
+      if (dayType(d) === 'train') missed++;
+    }
   }
-  const from = passed ? passed.height : 0;
-  return { meters, passed, next, progress: next ? (meters - from) / (next.height - from) : 1 };
+
+  let mood;
+  if (history[today]?.done) mood = 'happy';
+  else if (dayType(today) === 'train' && setsToday > 0) mood = 'working';
+  else if (missed >= 3) mood = 'down';
+  else if (dayType(today) === 'rest') mood = 'rest';
+  else if (missed >= 1) mood = 'sleepy';
+  else mood = 'waiting';
+
+  return { days, stage, name: BUDDY_STAGES[stage].name, next, toNext: next ? next.at - days : 0, missed, mood };
 }
 
 // ---------- 首次引导 ----------

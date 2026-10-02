@@ -41,19 +41,20 @@
       <p id="feedback" class="feedback" aria-live="polite"></p>
     </section>
     <aside class="side">
+      <section class="buddy">
+        <div id="buddy-art" class="buddy-art"></div>
+        <p class="buddy-name"><span id="buddy-name"></span><small id="buddy-days"></small></p>
+        <p id="buddy-say" class="buddy-say"></p>
+      </section>
       <section class="block">
         <h2 class="label">连续</h2>
-        <p class="streak"><b id="streak">0</b><span>天</span></p>
-        <ol id="week" class="week" aria-label="本周"></ol>
-      </section>
-      <section class="block">
-        <h2 class="label">累计爬升</h2>
-        <p class="climb"><b id="climb">0</b><span>米</span></p>
-        <div class="track" aria-hidden="true"><i id="climb-bar"></i></div>
-        <p id="climb-next" class="next"></p>
+        <div class="streak-row">
+          <p class="streak"><b id="streak">0</b><span>天</span></p>
+          <ol id="week" class="week" aria-label="本周"></ol>
+        </div>
       </section>
       <dl class="stats">
-        <div><dt>累计训练</dt><dd id="stat-total"></dd></div>
+        <div><dt>本周</dt><dd id="stat-week"></dd></div>
         <div><dt>体重</dt><dd id="stat-weight"></dd></div>
       </dl>
       <p class="hint"><kbd>1</kbd> – <kbd>4</kbd> 记一组　<kbd>空格</kbd> 完成今天</p>
