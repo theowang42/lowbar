@@ -37,7 +37,9 @@ lowbar/
 ├── buddy.js        # 养成小人的像素画（只生成 SVG 字符串，不访问 DOM 和存储）
 ├── sw.js
 ├── manifest.json
-├── icon.svg        # 主图标；apple-touch-icon.png（180）与 icon-512.png 由它渲染而来
+├── icon.svg        # 主图标：养成小人「传奇」阶段在单杠上拉上去的那一帧（64×64 像素，1-bit + 橙色头带）
+├── favicon.svg     # 浏览器标签页小图标：同一造型的 16×16 简化版
+│                   # apple-touch-icon.png（180，60 格 × 3）与 icon-512.png（64 格 × 8）按整数倍放大导出
 ├── .nojekyll       # 让 Pages 跳过 Jekyll，原样发布
 ├── test/core.test.js
 └── .github/workflows/test.yml   # push 和 PR 时运行 node --test

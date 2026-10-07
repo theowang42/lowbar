@@ -1,6 +1,6 @@
 // 离线缓存：联网时用最新版本，断网时用缓存。
 // 修改资源列表时把 CACHE 版本号加一，旧缓存会被清掉。
-const CACHE = 'lowbar-v7';
+const CACHE = 'lowbar-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const ASSETS = [
   './buddy.js',
   './manifest.json',
   './icon.svg',
+  './favicon.svg',
   './apple-touch-icon.png',
   './icon-512.png',
 ];
